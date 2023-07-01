@@ -1,9 +1,8 @@
 # OTW Level Connector (in-progress)
 
 A shell script that makes the process of connecting to [OverTheWire](https://overthewire.org/wargames/ "OTW")
-levels quicker and more convenient, keeps track of level passwords
-the user has uncovered, and tracks the user's overall progress at
-completing the 183+ OTW levels.
+levels quicker and more convenient and keeps track of the level passwords
+that the user has uncovered.
 
 ## Planned Features
 
