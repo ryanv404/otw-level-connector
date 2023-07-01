@@ -26,6 +26,12 @@ array set LEVELS_DATA [list {maze}       {2225 9}    \
                             {formulaone} {2232 6}]
 
 ###[ PROCEDURES ]########################################
+proc show_usage { progname } {
+  puts "usage: $progname <LEVEL>"
+  puts "       $progname -p|--password <PASSWORD> -l|--level <LEVEL>\n"
+  exit 1
+}
+
 proc parse_level { level lname lnum } {
   upvar $lname levelname
   upvar $lnum levelnum
@@ -74,18 +80,19 @@ proc validate_level { lname lnum rhost rport } {
   return 0
 }
 
-proc get_saved_password { pass_fpath lname } {
+proc get_saved_password { lname } {
+  set pass_fpath "$::env(HOME)/.otw/otw_passwords.txt"
   set lpass "?"
 
   if { [catch {open "$pass_fpath" r} pass_fd] } {
     puts "\[-] Error opening password file."
-    return "$lpass"
+    return "?"
   }
 
   while { [gets $pass_fd line] >= 0 } {
-    set name [lindex [split $line ":"] 0]
+    set name [lindex [split $line " "] 0]
     if { "$lname" eq "$name" } {
-      set lpass [lindex [split $line ":"] 1]
+      set lpass [lindex [split $line " "] 1]
       break
     }
   }
@@ -95,25 +102,20 @@ proc get_saved_password { pass_fpath lname } {
 }
 
 proc get_level_password { lname lpass } {
-  upvar $lpass levelpass
-
   set pass_fpath "$::env(HOME)/.otw/otw_passwords.txt"
+  upvar $lpass levelpass
   set levelpass "?"
 
-  # Check for password file in default location
   if { [file exists "$pass_fpath"] } {
-    set levelpass [get_saved_password "$pass_fpath" "$lname"]
-
-  # Check for password file in the current directory
-  } elseif { [file exists "./otw_passwords.txt"] } {
-    set levelpass [get_saved_password "./otw_passwords.txt" "$lname"]
-
-  # No password file found, so create one
+    set levelpass [get_saved_password "$lname"]
   } else {
-    puts "\[*] No OTW passwords file found."
-    if { [create_password_file] } {
+    # No password file found, so create one
+    set rv [create_password_file]
+    if { $rv != 0 } {
       puts "\[-] Unable to create an OTW passwords file."
       return 1
+    } else {
+      set levelpass [get_saved_password "$lname"]
     }
   }
 
@@ -124,10 +126,10 @@ proc create_password_file {} {
   set pass_fpath "$::env(HOME)/.otw/otw_passwords.txt"
 
   if { ! [file exists "$::env(HOME)/.otw"] || ! [file isdirectory "$::env(HOME)/.otw"] } {
-    if { [file exists "$::env(HOME)"] && [file isdirectory "$::env(HOME)"] } {
+    if { [file isdirectory "$::env(HOME)"] } {
       file mkdir "$::env(HOME)/.otw"
     } else {
-      set pass_fpath "./otw_passwords.txt"
+      return 1
     }
   }
 
@@ -144,35 +146,35 @@ proc create_password_file {} {
   }
 
   foreach name [array names ::LEVELS_DATA] {
-    set lmax [lindex [split "$::LEVELS_DATA($name)" ":"] 1]
+    set lmax [lindex [split "$::LEVELS_DATA($name)" " "] 1]
     for { set i 0 } { $i <= $lmax } { incr i } {
       switch -exact -- "$name$i" {
         "maze0" {
-          puts $pass_fd "$name$i:maze0"
+          puts $pass_fd "$name$i maze0"
         }
         "natas0" {
-          puts $pass_fd "$name$i:natas0"
+          puts $pass_fd "$name$i natas0"
         }
         "bandit0" {
-          puts $pass_fd "$name$i:bandit0"
+          puts $pass_fd "$name$i bandit0"
         }
         "narnia0" {
-          puts $pass_fd "$name$i:narnia0"
+          puts $pass_fd "$name$i narnia0"
         }
         "utumno0" {
-          puts $pass_fd "$name$i:utumno0"
+          puts $pass_fd "$name$i utumno0"
         }
         "manpage0" {
-          puts $pass_fd "$name$i:manpage0"
+          puts $pass_fd "$name$i manpage0"
         }
         "behemoth0" {
-          puts $pass_fd "$name$i:behemoth0"
+          puts $pass_fd "$name$i behemoth0"
         }
         "leviathan0" {
-          puts $pass_fd "$name$i:leviathan0"
+          puts $pass_fd "$name$i leviathan0"
         }
         default {
-          puts $pass_fd "$name$i:?"
+          puts $pass_fd "$name$i ?"
         }
       }
     }
@@ -201,7 +203,7 @@ proc update_password_file { lname updated_pass } {
 
   # Update the current level's password field
   while { [gets $pass_fd line] >= 0 } {
-    set name [lindex [split $line ":"] 0]
+    set name [lindex [split $line " "] 0]
     if { "$lname" eq "$name" } {
       puts $temp_fd "$name:$updated_pass"
     } else {
@@ -289,6 +291,8 @@ proc main { args_list } {
   parse_level "$level" lname lnum
   validate_level "$lname" "$lnum" rhost rport
   get_level_password "$level" lpass
+
+  # Clean up global namespace
   array unset ::LEVELS_DATA
 
   if { "$lname" eq "natas" } {
@@ -304,7 +308,7 @@ proc main { args_list } {
 
 ###[ RUN MAIN PROGRAM ]##################################
 if { $argc != 1 } {
-  puts "\[-] usage: $argv0 <LEVEL>"
+  show_usage "$argv0"
   exit 1
 } else {
   main "$argv"
