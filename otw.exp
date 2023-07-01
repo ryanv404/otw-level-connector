@@ -28,7 +28,7 @@ array set LEVELS_DATA [list {maze}       {2225 9}    \
 ###[ PROCEDURES ]########################################
 proc show_usage { progname } {
   puts "usage: $progname <LEVEL>"
-  puts "       $progname -p|--password <PASSWORD> -l|--level <LEVEL>\n"
+  puts "       $progname \[-p|--password <PASSWORD>] \[-l|--level <LEVEL>]"
   exit 1
 }
 
@@ -222,13 +222,13 @@ proc update_password_file { lname updated_pass } {
 
 proc handle_natas_levels { level lpass } {
   puts "\[*] Use a web browser to connect to natas levels:"
-  puts "    username: $level"
+  puts "    Username: $level"
 
   if { "$lpass" ne "?" } {
-    puts "    password: $lpass"
+    puts "    Password: $lpass"
   }
 
-  puts "    website:  http://$level.natas.labs.overthewire.org"
+  puts "    Website:  http://$level.natas.labs.overthewire.org"
   return 0
 }
 
