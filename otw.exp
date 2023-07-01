@@ -37,7 +37,7 @@ proc parse_level { level lname lnum } {
   upvar $lnum levelnum
 
   # Level name length limits: maze (4 chars), formulaone (10 chars)
-  if { [regexp {([a-zA-Z]{4,10})([1-9]?[0-9])} $level -> sub1 sub2] } {
+  if { [regexp {^([a-zA-Z]{4,10})([1-9]?[0-9])$} $level -> sub1 sub2] } {
     set levelname $sub1
     set levelnum $sub2
   } else {
@@ -61,7 +61,8 @@ proc validate_level { lname lnum rhost rport } {
 
       # Validate level number
       if { $lnum < 0 || $lnum > $lmax } {
-        puts "\[-] Valid $lname levels are: $lname\0 - $lname$lmax."
+        set zero 0
+        puts "\[-] Valid $lname levels are: $lname$zero - $lname$lmax."
         exit 1
       }
 
@@ -221,11 +222,13 @@ proc update_password_file { lname updated_pass } {
 
 proc handle_natas_levels { level lpass } {
   puts "\[*] Use a web browser to connect to natas levels:"
-  puts "Username: $level"
+  puts "    username: $level"
 
-  if { "$lpass" ne "?" } { puts "Password: $lpass"; }
+  if { "$lpass" ne "?" } {
+    puts "    password: $lpass"
+  }
 
-  puts "Website:  http://$level.natas.labs.overthewire.org"
+  puts "    website:  http://$level.natas.labs.overthewire.org"
   return 0
 }
 
@@ -241,6 +244,13 @@ proc connect_to_level { rhost rport level lpass } {
       send -- "yes\r"
       exp_continue
     }
+    -re {please try again.*: $} {
+      send_user -- "\[-] Incorrect password. Enter the $level password: "
+      expect_user -re {^(.*)\n$}
+      set updated_pass $expect_out(1,string)
+  		send -- "$updated_pass\r"
+  		exp_continue
+    }
     -re {.assword: $} {
       if { "$lpass" ne "?" } {
         send -- "$lpass\r"
@@ -248,18 +258,9 @@ proc connect_to_level { rhost rport level lpass } {
       }
       send_user -- "\[*] Enter the $level password: "
       expect_user -re {^(.*)\n$}
-      send_user -- "\n"
       set updated_pass $expect_out(1,string)
   		send -- "$updated_pass\r"
       exp_continue
-    }
-    -re {please try again.*: $} {
-      send_user -- "\[*] Incorrect password. Enter the $level password: "
-      expect_user -re {^(.*)\n$}
-      send_user -- "\n"
-      set updated_pass $expect_out(1,string)
-  		send -- "$updated_pass\r"
-  		exp_continue
     }
     -re {\$ $} {
       # Save password if it is different from the saved password
