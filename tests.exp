@@ -13,90 +13,77 @@ array set LDATA [list {maze}       {2225 9}    \
                       {leviathan}  {2223 7}    \
                       {formulaone} {2232 6}]
 
-proc get_all_variables {varname} {
-  global $varname
-  set ctypes_list {}
-  if {[array exists $varname]} {
-    set asize [array size $varname]
-    puts "\033\[0;95m$varname (array)\033\[0;0m:"
-    foreach {n v} [array get $varname] {
-      puts "  \033\[0;95m$varname\($n\)\033\[0;0m = $v\033\[0;0m"
-    }
-    return 0
-  }
-  if {[string is list [set $varname]] && [llength [set $varname]] > 1} {
-    puts "\033\[0;36m$varname (list)\033\[0;0m:"
-    set lsize [llength [set $varname]]
-    for {set i 0} {$i < $lsize} {incr i} {
-      puts "  \033\[0;36m$varname\[$i]\033\[0;0m = [lindex [set $varname] $i]"
-    }
-    return 0
-  }
-  if {[string is integer -strict [set $varname]]} {
-    puts "\033\[0;94m$varname (integer)\033\[0;0m = [set $varname]"
-    return 0
-  } elseif {[string is double -strict [set $varname]]} {
-    puts "\033\[0;92m$varname (double)\033\[0;0m = [set $varname]"
-    return 0
-  } elseif {[string is entier -strict [set $varname]]} {
-    puts "\033\[0;92m$varname (entier)\033\[0;0m = [set $varname]"
-    return 0
-  } elseif {[string is wideinteger -strict [set $varname]]} {
-    puts "\033\[0;92m$varname (wideinteger)\033\[0;0m = [set $varname]"
-    return 0
+proc value_is_actually_a_list {value} {
+  if {[string is list $value] && [llength $value] > 1} {
+    return 1
   } else {
-    puts "\033\[0;93m$varname (string)\033\[0;0m = [set $varname]"
     return 0
   }
-
-  # if {[string is ascii -strict [set $varname]]} {lappend ctypes_list "ascii"}
-  # if {[string is print -strict [set $varname]]} {
-  #   lappend ctypes_list "print"
-  #   if {[string is graph -strict [set $varname]]} {
-  #     lappend ctypes_list "graph"
-  #     if {[string is alnum -strict [set $varname]]} {
-  #       lappend ctypes_list "alnum"
-  #       if {[string is alpha -strict [set $varname]]} {
-  #         lappend ctypes_list "alpha"
-  #         if {[string is upper -strict [set $varname]]} {
-  #           lappend ctypes_list "upper"
-  #         } elseif {[string is lower -strict [set $varname]]} {
-  #           lappend ctypes_list "lower"
-  #         }
-  #         if {[string is wordchar -strict [set $varname]]} {lappend ctypes_list "wordchar"}
-  #       }
-  #       if {[string is digit -strict [set $varname]]} {
-  #         lappend ctypes_list "digit"
-  #         if {[string is xdigit -strict [set $varname]]} {lappend ctypes_list "xdigit"}
-  #       }
-  #     } elseif {[string is punct -strict [set $varname]]} {
-  #       lappend ctypes_list "punct"
-  #     }
-  #   } elseif {[string is space -strict [set $varname]]} {
-  #     lappend ctypes_list "space"
-  #   }
-  # }
-  # if {[string is control -strict [set $varname]]} {lappend ctypes_list "control"}
-  # if {[string is boolean -strict [set $varname]]} {
-  #     lappend ctypes_list "boolean"
-  #     if {[string is true -strict [set $varname]]} {
-  #       lappend ctypes_list "true"
-  #     } elseif {[string is false -strict [set $varname]]} {
-  #       lappend ctypes_list "false"
-  #     }
-  # }
-  puts "$varname (unknown type) = [set $varname]"
-  return 0
 }
 
-proc test_level_parsing {level_regex} {
+proc get_values_from_array {arrname} {
+  global $arrname
+  foreach {keyname value} [array get $arrname] {
+    if {[value_is_actually_a_list $value]} {
+      get_values_from_list "$arrname\($keyname\)" $value
+    } else {
+      puts "$arrname\($keyname\) = [get_type_from_value $value]"
+    }
+  }
+}
+
+proc get_values_from_list {list_label listvals} {
+  set lsize [llength $listvals]
+  for {set i 0} {$i < $lsize} {incr i} {
+    if {[value_is_actually_a_list [lindex $listvals $i]]} {
+      get_values_from_list "$list_label\[$i\]" [lindex $listvals $i]
+    } else {
+      puts "$list_label\[$i\] = [get_type_from_value [lindex $listvals $i]]"
+    }
+  }
+}
+
+proc get_type_from_value {value} {
+  set FMT_GRN "\033\[0;92m"
+  set FMT_YEL "\033\[0;93m"
+  set FMT_BLUE "\033\[0;94m"
+  set FMT_PURP "\033\[0;95m"
+  set FMT_CYAN "\033\[0;96m"
+  set FMT_CLR "\033\[0;0m"
+
+  if {[string is integer -strict $value]} {
+    return "$value${FMT_CLR} (${FMT_GRN}integer${FMT_CLR})"
+  } elseif {[string is double -strict $value]} {
+    return "$value${FMT_CLR} (${FMT_PURP}double${FMT_CLR})"
+  } elseif {[string is entier -strict $value]} {
+    return "$value${FMT_CLR} (${FMT_YEL}entier${FMT_CLR})"
+  } elseif {[string is wideinteger -strict $value]} {
+    return "$value${FMT_CLR} (${FMT_BLUE}wideinteger${FMT_CLR})"
+  } else {
+    if {[llength [lrange $value 0 end]] == 0} {
+      return "\"\" (${FMT_CYAN}string${FMT_CLR})"
+    } else {
+      return "[lrange $value 0 end]${FMT_CLR} (${FMT_CYAN}string${FMT_CLR})"
+    }
+  }
+}
+
+proc test_level_parsing {ldata_name} {
+  global $ldata_name
+  set FMT_RED "\033\[0;91m"
+  set FMT_GRN "\033\[0;92m"
+  set FMT_CLR "\033\[0;0m"
+  set level_regex { *([[:alpha:]]+) *([[:digit:]]+) *}
   set num_tests_failed 0
-  foreach {lname} [lsort [array names ::LEVELS_DATA]] {
+
+  foreach {lname} [lsort [array names $ldata_name]] {
     set test_failure_present 0
+
     for {set i 0} {$i < 3} {incr i} {
-      set lmax [lindex [split "$::LEVELS_DATA($lname)" " "] 1]
+      set lmax [lindex [lindex [array get $ldata_name $lname] 1] 1]
       set randnum [expr {int(rand() * $lmax)}]
       if {$i == 1} {set randnum [expr {$randnum + 40}]}
+
       set testlevel "$lname$randnum"
       if {[regexp $level_regex $testlevel -> sub1 sub2]} {
         set levelname [string tolower $sub1]
@@ -106,30 +93,44 @@ proc test_level_parsing {level_regex} {
       } else {
         set test_failure_present 1
         incr num_tests_failed
-        lappend parsing_list "$testlevel|*FAILED*"
+        lappend parsing_list "*$testlevel|FAILED*"
       }
     }
+
     if {$test_failure_present} {
-      puts "\033\[0;91m\[***FAILED***]\033\[0;0m [join $parsing_list " "]"
+      puts "\[${FMT_RED}FAILED${FMT_CLR}] [join $parsing_list " "]"
     } else {
-      puts "\033\[0;92m\[PASSED]\033\[0;0m [join $parsing_list " "]"
+      puts "\[${FMT_GRN}PASSED${FMT_CLR}] [join $parsing_list " "]"
     }
     unset parsing_list
   }
+
   if {$num_tests_failed != 0} {
-    puts -nonewline "***FAILED*** $num_tests_failed "
-    puts "[expr $num_tests_failed == 1 ? "TEST" : "TESTS"] FAILED!"
+    puts "${FMT_RED}\[$num_tests_failed TEST[expr {$num_tests_failed == 1 ? " " : "S "}]FAILED\]${FMT_CLR}"
+  } else {
+    puts "${FMT_GRN}\[$num_tests_failed TEST[expr {$num_tests_failed == 1 ? " " : "S "}]FAILED\]${FMT_CLR}"
   }
+
   return 0
 }
 
-###[ TESTS ]#################################
+##[ TESTS ]#################################
+puts "~~~~~~~~~~~~~~~~~~~~~~"
+puts "\[+] TEST LEVEL PARSING"
+puts "~~~~~~~~~~~~~~~~~~~~~~"
+test_level_parsing "LDATA"
+
+puts "\n~~~~~~~~~~~~~~~~~"
 puts "\[+] ALL VARIABLES"
 puts "~~~~~~~~~~~~~~~~~"
 foreach {var_name} [lsort [lrange [info vars] 0 end]] {
-  get_all_variables $var_name
+  if [array exists $var_name] {
+    get_values_from_array $var_name
+  } else {
+    if {[value_is_actually_a_list [set $var_name]]} {
+      get_values_from_list "$var_name" [set $var_name]
+    } else {
+      puts "$var_name = [get_type_from_value [set $var_name]]"
+    }
+  }
 }
-
-puts "\n\[+] TEST LEVEL PARSING"
-puts "~~~~~~~~~~~~~~~~~~~~~~"
-test_level_parsing { *([[:alpha:]]+) *([[:digit:]]+) *}
