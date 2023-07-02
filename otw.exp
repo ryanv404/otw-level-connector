@@ -36,16 +36,17 @@ proc parse_level { level lname lnum } {
   upvar $lname levelname
   upvar $lnum levelnum
 
-  # Level name length limits: maze (4 chars), formulaone (10 chars)
-  if { [regexp {^([a-zA-Z]{4,10})([1-9]?[0-9])$} $level -> sub1 sub2] } {
-    set levelname $sub1
-    set levelnum $sub2
-  } else {
-    puts "\[-] Valid OTW levels are: bandit, natas, leviathan, krypton, narnia,"
-    puts "    behemoth, utumno, maze, vortex, manpage, drifter, and formulaone."
-    exit 1
+  set lregex { *([[:alpha:]]+) *([[:digit:]]+) *}
+  if {[regexp $lregex $level -> sub1 sub2]} {
+    set levelname [string tolower $sub1]
+	  # Strips leading zeroes that can cause unintended octal interpretation
+    scan $sub2 %d levelnum
+    return 0
   }
-  return 0
+
+  puts "\[-] Valid OTW levels are: bandit, natas, leviathan, krypton, narnia,"
+  puts "    behemoth, utumno, maze, vortex, manpage, drifter, and formulaone."
+  exit 1
 }
 
 proc validate_level { lname lnum rhost rport } {
@@ -248,8 +249,8 @@ proc connect_to_level { rhost rport level lpass } {
       send_user -- "\[-] Incorrect password. Enter the $level password: "
       expect_user -re {^(.*)\n$}
       set updated_pass $expect_out(1,string)
-  		send -- "$updated_pass\r"
-  		exp_continue
+      send -- "$updated_pass\r"
+      exp_continue
     }
     -re {.assword: $} {
       if { "$lpass" ne "?" } {
@@ -259,7 +260,7 @@ proc connect_to_level { rhost rport level lpass } {
       send_user -- "\[*] Enter the $level password: "
       expect_user -re {^(.*)\n$}
       set updated_pass $expect_out(1,string)
-  		send -- "$updated_pass\r"
+      send -- "$updated_pass\r"
       exp_continue
     }
     -re {\$ $} {
@@ -308,10 +309,10 @@ proc main { args_list } {
 }
 
 ###[ RUN MAIN PROGRAM ]##################################
-if { $argc != 1 } {
-  show_usage "$argv0"
-  exit 1
-} else {
-  main "$argv"
-  exit 0
-}
+# if { $argc != 1 } {
+#   show_usage "$argv0"
+#   exit 1
+# } else {
+#   main "$argv"
+#   exit 0
+# }
