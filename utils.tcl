@@ -13,18 +13,16 @@ proc test_level_parsing {ldata_name} {
   set LDATA_NAME_FQ [format {::%s} $ldata_name]
   set level_regex { *([[:alpha:]]+) *([[:digit:]]+) *}
 
-  puts "~~~~~~~~~~~~~~~~~~~~~~"
-  puts "\[${FMT_PURP}\+${CLR_FMT}] ${FMT_BLUE}TEST LEVEL PARSING${CLR_FMT}"
-  puts "~~~~~~~~~~~~~~~~~~~~~~"
-
   foreach {lname} [lsort [array names $LDATA_NAME_FQ]] {
     set test_failure_present 0
 
     for {set i 0} {$i < $num_tests_per_level} {incr i} {
       set lmax [lindex [lindex [array get $LDATA_NAME_FQ $lname] 1] 1]
       set randnum [expr {int(rand() * $lmax)}]
+
       if {$i == 1} {set randnum [expr {$randnum + 40}]}
       set testlevel "$lname$randnum"
+
       if {[regexp $level_regex $testlevel -> sub1 sub2]} {
         set levelname [string tolower $sub1]
         # Strip leading zeroes that can cause unintended octal interpretation
@@ -37,12 +35,15 @@ proc test_level_parsing {ldata_name} {
       }
     }
 
+    puts "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+    puts "\[${FMT_PURP}\+${CLR_FMT}] ${FMT_BLUE}TEST LEVEL PARSING${CLR_FMT}"
+    puts "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+
     if {$test_failure_present} {
       puts "\[${FMT_RED}FAILED${CLR_FMT}] [join $parsing_list " "]"
     } else {
       puts "\[${FMT_GRN}PASSED${CLR_FMT}] [join $parsing_list " "]"
     }
-
     set parsing_list ""
   }
 
@@ -55,45 +56,40 @@ proc test_level_parsing {ldata_name} {
 }
 
 proc get_var_info {varLabel varValue labelLen} {
-  set defaultValLen 48
+  set CLR_FMT         "\033\[0;0m"
+  set FMT_LRED        "\033\[0;91m"
+  set FMT_LGRN        "\033\[0;92m"
+  set FMT_LPURP       "\033\[0;95m"
+  set FMT_LCYAN       "\033\[0;96m"
+  set defaultValLen   48
   set defaultLabelLen 40
-  set CLR_FMT "\033\[0;0m"
-  set FMT_LRED "\033\[0;91m"
-  set FMT_LGRN "\033\[0;92m"
-  set FMT_LPURP "\033\[0;95m"
-  set FMT_LCYAN "\033\[0;96m"
   set type_RE {value is a (.+) with a refcount}
 
   if {$labelLen > $defaultLabelLen} {set labelLen $defaultLabelLen}
 
   set type_str [::tcl::unsupported::representation $varValue]
   if {! [regexp $type_RE $type_str -> type]} {
-    return [format "%-${labelLen}s ${FMT_LRED}%s${CLR_FMT} %s" $varLabel "unknown" $varValue]
+    return [format "%-${labelLen}s ${FMT_LRED}%9s${CLR_FMT} %s" $varLabel "unknown" $varValue]
   }
 
   if {$type eq "pure string" && [string length $varValue] == 0} {
-    return [format "%-${labelLen}s ${FMT_LPURP}%s${CLR_FMT} \"\"" $varLabel "string"]
-
+    return [format "%-${labelLen}s ${FMT_LPURP}%9s${CLR_FMT} \"\"" $varLabel "string"]
   } elseif {($type eq "pure string" && [string is integer $varValue]) ||
              $type eq "integer" ||
              $type eq "int"} {
-    return [format "%-${labelLen}s ${FMT_LGRN}%s${CLR_FMT} %d" $varLabel "integer" $varValue]
-
+    return [format "%-${labelLen}s ${FMT_LGRN}%9s${CLR_FMT} %d" $varLabel "integer" $varValue]
   } elseif {($type eq "pure string" && [string is double $varValue]) ||
              $type eq "double"} {
-    return [format "%-${labelLen}s ${FMT_LCYAN}%s${CLR_FMT} %.2f" $varLabel "double" $varValue]
-
+    return [format "%-${labelLen}s ${FMT_LCYAN}%9s${CLR_FMT} %.2f" $varLabel "double" $varValue]
   } elseif {($type eq "pure string" || $type eq "string" || $type eq "path") &&
              [string length $varValue] > $defaultValLen} {
     set strItem [format "%s..." [string range $varValue 0 [expr {$defaultValLen - 4}]]]
-    return [format "%-${labelLen}s ${FMT_LPURP}%s${CLR_FMT} %s" $varLabel "string" $strItem]
-
+    return [format "%-${labelLen}s ${FMT_LPURP}%9s${CLR_FMT} %s" $varLabel "string" $strItem]
   } elseif {$type eq "pure string" || $type eq "string" || $type eq "path"} {
-    return [format "%-${labelLen}s ${FMT_LPURP}%s${CLR_FMT} %s" $varLabel "string" $varValue]
-
+    return [format "%-${labelLen}s ${FMT_LPURP}%9s${CLR_FMT} %s" $varLabel "string" $varValue]
   } elseif {[string length $varValue] > ${defaultValLen}} {
     set strItem [format "%s..." [string range $varValue 0 [expr {$defaultValLen - 4}]]]
-    return [format "%-${labelLen}s %s %s" $varLabel $type $strItem]
+    return [format "%-${labelLen}s %9s %s" $varLabel $type $strItem]
   }
 
   set newlist ""
@@ -104,24 +100,24 @@ proc get_var_info {varLabel varValue labelLen} {
       incr idx
     }
     return $newlist
-
   } elseif {$type eq "list" && [llength $varValue] == 1} {
     return [get_var_info "$varLabel\[0\]" [lindex $varValue 0] $labelLen]
   }
 
-  return [format "%-${labelLen}s %s %s" $varLabel $type $varValue]
+  return [format "%-${labelLen}s %9s %s" $varLabel $type $varValue]
 }
 
 proc get_max_field_widths {{ns ::}} {
   set pat [set ns]::*
+  set arrVarsList     ""
+  set lstVarsList     ""
+  set genVarsList     ""
+  set maxLensList     ""
+  set arrMaxLabelLen   0
+  set lstMaxLabelLen   0
+  set genMaxLabelLen   0
+  set defaultLabelLen 40
   set type_RE {value is a (.+) with a refcount}
-  set arrMaxLabelLen 0
-  set lstMaxLabelLen 0
-  set genMaxLabelLen 0
-  set arrVarsList ""
-  set lstVarsList ""
-  set genVarsList ""
-  set maxLensList ""
 
   foreach {var} [info vars $pat] {
     # Handle array vars
@@ -164,36 +160,27 @@ proc get_max_field_widths {{ns ::}} {
     continue
   }
 
-  foreach {item} $arrVarsList {
-    lappend maxLensList [list $item $arrMaxLabelLen]
-  }
+  set overallMaxLen $arrMaxLabelLen
+  if {$overallMaxLen < $lstMaxLabelLen}  {set overallMaxLen $lstMaxLabelLen}
+  if {$overallMaxLen < $genMaxLabelLen}  {set overallMaxLen $genMaxLabelLen}
+  if {$overallMaxLen > $defaultLabelLen} {set overallMaxLen $defaultLabelLen}
 
-  foreach {item} $lstVarsList {
-    lappend maxLensList [list $item $lstMaxLabelLen]
-  }
-
-  foreach {item} $genVarsList {
-    lappend maxLensList [list $item $genMaxLabelLen]
-  }
-
+  foreach {item} $arrVarsList {lappend maxLensList [list $item $overallMaxLen]}
+  foreach {item} $lstVarsList {lappend maxLensList [list $item $overallMaxLen]}
+  foreach {item} $genVarsList {lappend maxLensList [list $item $overallMaxLen]}
   return $maxLensList
 }
 
 proc print_all_vars {{ns ::}} {
   set pat [set ns]::*
-  set type_RE {value is a (.+) with a refcount}
-  set CLR_FMT "\033\[0;0m"
-  set FMT_BLUE "\033\[0;34m"
-  set FMT_PURP "\033\[0;35m"
-  set FMT_LRED "\033\[0;91m"
-
   set arrVarsList ""
   set lstVarsList ""
   set genVarsList ""
-
-  puts "~~~~~~~~~~~~~~~~~"
-  puts "\[${FMT_PURP}\+${CLR_FMT}] ${FMT_BLUE}ALL VARIABLES${CLR_FMT}"
-  puts "~~~~~~~~~~~~~~~~~"
+  set CLR_FMT     "\033\[0;0m"
+  set FMT_BLUE    "\033\[0;34m"
+  set FMT_PURP    "\033\[0;35m"
+  set FMT_LRED    "\033\[0;91m"
+  set type_RE {value is a (.+) with a refcount}
 
   set maxList [concat {*}[get_max_field_widths]]
   array set labelLen $maxList
@@ -229,29 +216,22 @@ proc print_all_vars {{ns ::}} {
     }
   }
 
-  if {[llength $arrVarsList] > 0} {
-    foreach {arrItem} $arrVarsList {
-      puts $arrItem
-    }
-  }
+  puts "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+  puts "\[${FMT_PURP}\+${CLR_FMT}] ${FMT_BLUE}ALL VARIABLES${CLR_FMT}"
+  puts "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
 
-  if {[llength $lstVarsList] > 0} {
-    foreach {lstItem} $lstVarsList {
-      puts $lstItem
-    }
-  }
-
-  if {[llength $genVarsList] > 0} {
-    foreach {genItem} $genVarsList {
-      puts $genItem
-    }
-  }
+  if {[llength $arrVarsList] > 0} {foreach {arrItem} $arrVarsList {puts $arrItem}}
+  if {[llength $lstVarsList] > 0} {foreach {lstItem} $lstVarsList {puts $lstItem}}
+  if {[llength $genVarsList] > 0} {foreach {genItem} $genVarsList {puts $genItem}}
+  return
 }
 
 proc print_all_namespaces {{ns ::}} {
-  puts [list namespace $ns]
-  foreach child [namespace children $ns] {
-    puts [list namespace $child]
-  }
-}
+  puts "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+  puts "\[${FMT_PURP}\+${CLR_FMT}] ${FMT_BLUE}ALL NAMESPACES${CLR_FMT}"
+  puts "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
 
+  puts [list "namespace" $ns]
+  foreach child [namespace children $ns] {puts [list "namespace" $child]}
+  return
+}

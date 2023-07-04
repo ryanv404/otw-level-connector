@@ -8,6 +8,7 @@
 
 ###[ CONFIGS ]###########################################
 log_user 0
+exp_internal 0
 set timeout 10
 match_max 10000
 
@@ -26,9 +27,9 @@ array set LEVELS_DATA [list {maze}       {2225 9}    \
                             {formulaone} {2232 6}]
 
 ###[ PROCEDURES ]########################################
-proc show_usage { progname } {
+proc show_usage {progname} {
   puts "usage: $progname <LEVEL>"
-  puts "       $progname \[-p|--password <PASSWORD>] \[-l|--level <LEVEL>]"
+  puts "       $progname \[-h|-d] \[-p <PASSWORD>] \[-l <LEVEL>]"
   exit 1
 }
 
@@ -129,15 +130,15 @@ proc get_level_password { lname lpass } {
 proc create_password_file {} {
   set pass_fpath "$::env(HOME)/.otw/otw_passwords.txt"
 
-  if { ! [file exists "$::env(HOME)/.otw"] || ! [file isdirectory "$::env(HOME)/.otw"] } {
-    if { [file isdirectory "$::env(HOME)"] } {
+  if {[info exists $::env(HOME)] && [file isdirectory $::env(HOME)]} {
+    if {[file isdirectory "$::env(HOME)"]} {
       file mkdir "$::env(HOME)/.otw"
     } else {
       return 1
     }
   }
 
-  if { [catch {open "$pass_fpath" w} pass_fd] } {
+  if {[catch {open "$pass_fpath" w} pass_fd]} {
     puts "\[-] Error opening password file."
     return 1
   }
@@ -151,20 +152,21 @@ proc create_password_file {} {
 
   foreach name [array names ::LEVELS_DATA] {
     set lmax [lindex [split "$::LEVELS_DATA($name)" " "] 1]
-    for { set i 0 } { $i <= $lmax } { incr i } {
+    for {set i 0} {$i <= $lmax} {incr i} {
       switch -exact -- "$name$i" {
-        "maze0" {puts $pass_fd "$name$i maze0"}
-        "natas0" {puts $pass_fd "$name$i natas0"}
-        "bandit0" {puts $pass_fd "$name$i bandit0"}
-        "narnia0" {puts $pass_fd "$name$i narnia0"}
-        "utumno0" {puts $pass_fd "$name$i utumno0"}
-        "manpage0" {puts $pass_fd "$name$i manpage0"}
-        "behemoth0" {puts $pass_fd "$name$i behemoth0"}
+        "maze0"      {puts $pass_fd "$name$i maze0"}
+        "natas0"     {puts $pass_fd "$name$i natas0"}
+        "bandit0"    {puts $pass_fd "$name$i bandit0"}
+        "narnia0"    {puts $pass_fd "$name$i narnia0"}
+        "utumno0"    {puts $pass_fd "$name$i utumno0"}
+        "manpage0"   {puts $pass_fd "$name$i manpage0"}
+        "behemoth0"  {puts $pass_fd "$name$i behemoth0"}
         "leviathan0" {puts $pass_fd "$name$i leviathan0"}
-        default {puts $pass_fd "$name$i ?"}
+        default      {puts $pass_fd "$name$i ?"}
       }
     }
   }
+
   close $pass_fd
   return 0
 }
@@ -238,7 +240,7 @@ proc connect_to_level { rhost rport level lpass } {
       set updated_pass $expect_out(1,string)
       send -- "$updated_pass\r"
       exp_continue
-    
+
     } -re {.assword: $} {
       if { "$lpass" ne "?" } {
         send -- "$lpass\r"
@@ -249,7 +251,7 @@ proc connect_to_level { rhost rport level lpass } {
       set updated_pass $expect_out(1,string)
       send -- "$updated_pass\r"
       exp_continue
-    
+
     } -re {\$ $} {
       if { "$updated_pass" ne "?" } {
         # Save password if it is different from the saved password
@@ -259,7 +261,7 @@ proc connect_to_level { rhost rport level lpass } {
       send_user -- "\[+] Successfully logged in as $level.\n"
       send -- "\r"
       interact
-    
+
     } timeout {
       send_user -- "\[-] The connection timed out.\n"
       return 1
@@ -269,40 +271,112 @@ proc connect_to_level { rhost rport level lpass } {
 }
 
 ###[ MAIN FUNCTION ]#####################################
-proc main { args_list } {
-  set level [lindex $args_list 0]
-  set lnum ""
+proc main {optsArr} {
+  upvar $optsArr OPTS
+  set lnum  ""
   set lname ""
   set lpass ""
   set rhost ""
   set rport ""
+  set level $OPTS(argsList)
 
-  parse_level "$level" lname lnum
-  validate_level "$lname" "$lnum" rhost rport
-  get_level_password "$level" lpass
+  parse_level        $level lname lnum
+  validate_level     $lname $lnum rhost rport
+  get_level_password $level lpass
 
   # Clean up global namespace
   #array unset ::LEVELS_DATA
 
-  source utils.tcl
   return
-  
-  if { "$lname" eq "natas" } {
+
+  if {$lname eq "natas"} {
     # Natas levels are accessed with a web browser
-    handle_natas_levels "$level" "$lpass"
+    handle_natas_levels $level "$lpass"
   } else {
     # Connect to all other levels via Expect + ssh
-    connect_to_level "$rhost" "$rport" "$level" "$lpass"
+    connect_to_level $rhost $rport $level "$lpass"
   }
 
   return 0
 }
 
-###[ RUN MAIN PROGRAM ]##################################
-if { $argc != 1 } {
-  show_usage "$argv0"
-  exit 1
-} else {
-  main $argv
-  exit 0
+proc handle_cmdline_args {optsArr} {
+  upvar $optsArr OPTS
+  set index   0
+  set argsLen [llength $OPTS(argsList)]
+
+  if {$argsLen == 0} {
+    show_usage $OPTS(progName)
+    exit 1
+  }
+
+  while {$index < $argsLen} {
+    set arg [lindex $OPTS(argsList) $index]
+    if {[string match "-*" "$arg"] != 1} {break}
+    switch -exact -- $arg {
+      {-l}         -
+      {--level}    {
+        incr index
+        if {$index < $argsLen} {
+          set OPTS(level) [lindex $OPTS(argsList) $index]
+          incr index
+          continue
+        } else {
+          # Missing argument
+          puts "Missing required argument for option \"$arg\"."
+          exit 1
+        }
+      }
+      {-p}         -
+      {--password} {
+        incr index
+        if {$index < $argsLen} {
+          set OPTS(pass) [lindex $OPTS(argsList) $index]
+          incr index
+          continue
+        } else {
+          # Missing argument
+          puts "Missing required argument for option \"$arg\"."
+          exit 1
+        }
+      }
+      {-?}     -
+      {-h}     -
+      {--help} {
+        show_usage $OPTS(progName)
+        exit 0
+      }
+      {-d}      -
+      {--debug} {
+        source "utils.tcl"
+        print_all_vars
+        exit 0
+      }
+      {default} {
+        # Bad option
+        puts "Unknown option \"$arg\"."
+        exit 1
+      }
+    }
+  }
+
+  foreach {name} [array names OPTS] {
+    puts "${name}: $OPTS($name)"
+  }
+
+  return
 }
+
+###[ RUN MAIN PROGRAM ]##################################
+array set OPTS {
+  {pass}       {}
+  {level}      {}
+  {progName}   {}
+  {argsList}   {}
+}
+set OPTS(argsList) "$::argv"
+set OPTS(progName) "$::argv0"
+
+handle_cmdline_args OPTS
+main OPTS
+exit 0
