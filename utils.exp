@@ -1,247 +1,266 @@
 #!/usr/bin/env expect
 
 ###[ TEST PROCS ]################################
-# Virtually everything is a list in Tcl. This tightens up the meaning.
-# proc value_is_actually_a_list {value} {
-#   if {[string is list $value] && [llength $value] > 1} {
-#     return 1
-#   } else {
-#     return 0
-#   }
-# }
+proc test_level_parsing {ldata_name} {
+  set parsing_list ""
+  set num_tests_failed 0
+  set num_tests_per_level 3
+  set CLR_FMT "\033\[0;0m"
+  set FMT_RED "\033\[0;31m"
+  set FMT_GRN "\033\[0;32m"
+  set FMT_BLUE "\033\[0;34m"
+  set FMT_PURP "\033\[0;35m"
+  set LDATA_NAME_FQ [format {::%s} $ldata_name]
+  set level_regex { *([[:alpha:]]+) *([[:digit:]]+) *}
 
-# proc get_values_from_array {arr_label arrname} {
-#   global $arrname
-#   foreach {keyname value} [array get $arrname] {
-#     if {[value_is_actually_a_list $value]} {
-#       get_values_from_list "$arr_label\($keyname\)" $value
-#     } else {
-#       puts "$arr_label\($keyname\) = [get_type_from_value $value]"
-#     }
-#   }
-# }
+  puts "~~~~~~~~~~~~~~~~~~~~~~"
+  puts "\[${FMT_PURP}\+${CLR_FMT}] ${FMT_BLUE}TEST LEVEL PARSING${CLR_FMT}"
+  puts "~~~~~~~~~~~~~~~~~~~~~~"
 
-# proc get_values_from_list {list_label listvals} {
-#   set lsize [llength $listvals]
-#   for {set i 0} {$i < $lsize} {incr i} {
-#     if {[value_is_actually_a_list [lindex $listvals $i]]} {
-#       get_values_from_list "$list_label\[$i\]" [lindex $listvals $i]
-#     } else {
-#       puts "$list_label\[$i\] = [get_type_from_value [lindex $listvals $i]]"
-#     }
-#   }
-# }
+  foreach {lname} [lsort [array names $LDATA_NAME_FQ]] {
+    set test_failure_present 0
 
-# proc get_type_from_value {value} {
-#   set FMT_GRN "\033\[0;32m"
-#   set FMT_YEL "\033\[0;33m"
-#   set FMT_BLUE "\033\[0;34m"
-#   set FMT_PURP "\033\[0;35m"
-#   set FMT_CYAN "\033\[0;36m"
-#   set FMT_CLR "\033\[0;0m"
+    for {set i 0} {$i < $num_tests_per_level} {incr i} {
+      set lmax [lindex [lindex [array get $LDATA_NAME_FQ $lname] 1] 1]
+      set randnum [expr {int(rand() * $lmax)}]
+      if {$i == 1} {set randnum [expr {$randnum + 40}]}
+      set testlevel "$lname$randnum"
+      if {[regexp $level_regex $testlevel -> sub1 sub2]} {
+        set levelname [string tolower $sub1]
+        # Strip leading zeroes that can cause unintended octal interpretation
+        scan $sub2 {%d} levelnum
+        lappend parsing_list "$testlevel|$levelname|$levelnum"
+      } else {
+        set test_failure_present 1
+        incr num_tests_failed
+        lappend parsing_list "${FMT_RED}$testlevel|FAILED${CLR_FMT}"
+      }
+    }
 
-#   # Clear any formatting that snuck in from the value
-#   if {[string is integer -strict $value]} {
-#     return "${FMT_CLR}$value${FMT_CLR} (${FMT_GRN}integer${FMT_CLR})"
-#   } elseif {[string is double -strict $value]} {
-#     return "${FMT_CLR}$value${FMT_CLR} (${FMT_BLUE}double${FMT_CLR})"
-#   } elseif {[string is entier -strict $value]} {
-#     return "${FMT_CLR}$value${FMT_CLR} (${FMT_YEL}entier${FMT_CLR})"
-#   } elseif {[string is wideinteger -strict $value]} {
-#     return "${FMT_CLR}$value${FMT_CLR} (${FMT_CYAN}wideinteger${FMT_CLR})"
-#   } else {
-#     if {[llength [lrange $value 0 end]] == 0} {
-#       return "${FMT_CLR}\"\" (${FMT_PURP}string${FMT_CLR})"
-#     } else {
-#       return "${FMT_CLR}[lrange $value 0 end]${FMT_CLR} (${FMT_PURP}string${FMT_CLR})"
-#     }
-#   }
-# }
+    if {$test_failure_present} {
+      puts "\[${FMT_RED}FAILED${CLR_FMT}] [join $parsing_list " "]"
+    } else {
+      puts "\[${FMT_GRN}PASSED${CLR_FMT}] [join $parsing_list " "]"
+    }
 
-# proc test_level_parsing {ldata_name} {
-#   global $ldata_name
-#   set num_tests_failed 0
-#   set FMT_RED "\033\[0;31m"
-#   set FMT_GRN "\033\[0;32m"
-#   set FMT_CLR "\033\[0;0m"
+    set parsing_list ""
+  }
 
-#   set level_regex { *([[:alpha:]]+) *([[:digit:]]+) *}
+  if {$num_tests_failed != 0} {
+    set tst_word [expr {$num_tests_failed == 1 ? "TEST" : "TESTS"}]
+    puts "\[${FMT_RED}$num_tests_failed $tst_word FAILED${CLR_FMT}\]"
+  } else {
+    puts "\[${FMT_GRN}ALL TESTS PASSED${CLR_FMT}\]"
+  }
+}
 
-#   foreach {lname} [lsort [array names $ldata_name]] {
-#     set test_failure_present 0
-
-#     for {set i 0} {$i < 3} {incr i} {
-#       set lmax [lindex [lindex [array get $ldata_name $lname] 1] 1]
-#       set randnum [expr {int(rand() * $lmax)}]
-#       if {$i == 1} {set randnum [expr {$randnum + 40}]}
-
-#       set testlevel "$lname$randnum"
-#       if {[regexp $level_regex $testlevel -> sub1 sub2]} {
-#         set levelname [string tolower $sub1]
-#         # Strip leading zeroes that can cause unintended octal interpretation
-#         scan $sub2 %d levelnum
-#         lappend parsing_list "$testlevel|$levelname|$levelnum"
-#       } else {
-#         set test_failure_present 1
-#         incr num_tests_failed
-#         lappend parsing_list "${FMT_RED}$testlevel|FAILED${FMT_CLR}"
-#       }
-#     }
-
-#     if {$test_failure_present} {
-#       puts "\[${FMT_RED}FAILED${FMT_CLR}] [join $parsing_list " "]"
-#     } else {
-#       puts "\[${FMT_GRN}PASSED${FMT_CLR}] [join $parsing_list " "]"
-#     }
-#     unset parsing_list
-#   }
-
-#   if {$num_tests_failed != 0} {
-#     set tst_word [expr {$num_tests_failed == 1 ? "TEST" : "TESTS"}]
-#     puts "\[${FMT_RED}$num_tests_failed $tst_word FAILED${FMT_CLR}\]"
-#   } else {
-#     puts "\[${FMT_GRN}ALL TESTS PASSED${FMT_CLR}\]"
-#   }
-# }
-
-# ###[ TESTS DATA ]################################
-# array set LDATA [list {maze}       {2225 9}    \
-#                       {natas}      {0000 34}   \
-#                       {utumno}     {2227 8}    \
-#                       {narnia}     {2226 9}    \
-#                       {vortex}     {2228 27}   \
-#                       {bandit}     {2220 34}   \
-#                       {krypton}    {2231 7}    \
-#                       {manpage}    {2224 7}    \
-#                       {drifter}    {2230 15}   \
-#                       {behemoth}   {2221 8}    \
-#                       {leviathan}  {2223 7}    \
-#                       {formulaone} {2232 6}]
-  
-# ###[ RUN TESTS ]#################################
-# puts "~~~~~~~~~~~~~~~~~~~~~~"
-# puts "\[\033\[0;35m\+\033\[0;0m] \033\[0;34mTEST LEVEL PARSING\033\[0;0m"
-# puts "~~~~~~~~~~~~~~~~~~~~~~"
-# test_level_parsing "LDATA"
-
-# puts "\n~~~~~~~~~~~~~~~~~"
-# puts "\[\033\[0;35m\+\033\[0;0m] \033\[0;34mALL VARIABLES\033\[0;0m"
-# puts "~~~~~~~~~~~~~~~~~"
-# foreach {var_name} [lsort [lrange [info vars] 0 end]] {
-#   if [array exists $var_name] {
-#     get_values_from_array "\033\[0;95m${var_name}\033\[0;0m" "$var_name"
-#   } else {
-#     if {[value_is_actually_a_list [set $var_name]]} {
-#       get_values_from_list "\033\[0;94m${var_name}\033\[0;0m" [set $var_name]
-#     } else {
-#       puts "$var_name = [get_type_from_value [set $var_name]]"
-#     }
-#   }
-# }
-
-# puts "~~~~~~~~~~~~~~~~"
-# puts "\[\033\[0;35m\+\033\[0;0m] \033\[0;34mALL COMMANDS\033\[0;0m"
-# puts "~~~~~~~~~~~~~~~~"
-# puts [join [lsort [info commands]] "\n"]
-
-# set type_RE {value is a (.+) with a refcount}
-
-# foreach v [info vars] {
-#   if {[array exists $v]} {
-#     puts "$v --> (array) [array names $v]"
-#     continue
-#   }
-
-#   set type ""
-#   if {! [regexp $type_RE [tcl::unsupported::representation [set $v]] -> type]} {
-#     puts "$v --> (unknown) [set $v]"
-#     continue
-#   }
-  
-#   puts "$v --> ($type) [set $v]"
-# }
-
-proc get_vars {{ns ::}} {
-  set all_vars ""
-  set pat [set ns]::*
+proc get_var_info {varLabel varValue labelLen} {
+  set defaultValLen 48
+  set defaultLabelLen 40
+  set CLR_FMT "\033\[0;0m"
+  set FMT_LRED "\033\[0;91m"
+  set FMT_LGRN "\033\[0;92m"
+  set FMT_LPURP "\033\[0;95m"
+  set FMT_LCYAN "\033\[0;96m"
   set type_RE {value is a (.+) with a refcount}
 
-  foreach var [info vars $pat] {
-    set type ""
+  if {$labelLen > $defaultLabelLen} {set labelLen $defaultLabelLen}
+
+  set type_str [::tcl::unsupported::representation $varValue]
+  if {! [regexp $type_RE $type_str -> type]} {
+    return [format "%-${labelLen}s ${FMT_LRED}%s${CLR_FMT} %s" $varLabel "unknown" $varValue]
+  }
+
+  if {$type eq "pure string" && [string length $varValue] == 0} {
+    return [format "%-${labelLen}s ${FMT_LPURP}%s${CLR_FMT} \"\"" $varLabel "string"]
+
+  } elseif {($type eq "pure string" && [string is integer $varValue]) ||
+             $type eq "integer" ||
+             $type eq "int"} {
+    return [format "%-${labelLen}s ${FMT_LGRN}%s${CLR_FMT} %d" $varLabel "integer" $varValue]
+
+  } elseif {($type eq "pure string" && [string is double $varValue]) ||
+             $type eq "double"} {
+    return [format "%-${labelLen}s ${FMT_LCYAN}%s${CLR_FMT} %.2f" $varLabel "double" $varValue]
+
+  } elseif {($type eq "pure string" || $type eq "string" || $type eq "path") &&
+             [string length $varValue] > $defaultValLen} {
+    set strItem [format "%s..." [string range $varValue 0 [expr {$defaultValLen - 4}]]]
+    return [format "%-${labelLen}s ${FMT_LPURP}%s${CLR_FMT} %s" $varLabel "string" $strItem]
+
+  } elseif {$type eq "pure string" || $type eq "string" || $type eq "path"} {
+    return [format "%-${labelLen}s ${FMT_LPURP}%s${CLR_FMT} %s" $varLabel "string" $varValue]
+
+  } elseif {[string length $varValue] > ${defaultValLen}} {
+    set strItem [format "%s..." [string range $varValue 0 [expr {$defaultValLen - 4}]]]
+    return [format "%-${labelLen}s %s %s" $varLabel $type $strItem]
+  }
+
+  set newlist ""
+  if {$type eq "list" && [llength $varValue] > 1} {
+    set idx 0
+    foreach {lst_item} [lrange $varValue 0 end] {
+      lappend newlist [get_var_info "$varLabel\[$idx\]" $lst_item $labelLen]
+      incr idx
+    }
+    return $newlist
+
+  } elseif {$type eq "list" && [llength $varValue] == 1} {
+    return [get_var_info "$varLabel\[0\]" [lindex $varValue 0] $labelLen]
+  }
+
+  return [format "%-${labelLen}s %s %s" $varLabel $type $varValue]
+}
+
+proc get_max_field_widths {{ns ::}} {
+  set pat [set ns]::*
+  set type_RE {value is a (.+) with a refcount}
+  set arrMaxLabelLen 0
+  set lstMaxLabelLen 0
+  set genMaxLabelLen 0
+  set arrVarsList ""
+  set lstVarsList ""
+  set genVarsList ""
+  set maxLensList ""
+
+  foreach {var} [info vars $pat] {
+    # Handle array vars
     if {[array exists $var]} {
-      lappend all_vars $var "array"
-    } else {
-      set type_str [tcl::unsupported::representation [set $var]]
-      if {! [regexp $type_RE $type_str -> type]} {
-        lappend all_vars $var "unknown"
-      } elseif {$type eq "pure string"} {
-        if {[string length [set $var]] == 0} {
-          lappend all_vars $var "empty string"
-        } elseif {[string is integer [set $var]]} {
-          lappend all_vars $var "integer"
-        } elseif {[string is double [set $var]]} {
-          lappend all_vars $var "double"
-        } else {
-          lappend all_vars $var "string"
-        }
-      } else {
-        lappend all_vars $var $type
+      # Plus 2 for parentheses
+      set arrNameLen [expr [string length $var] + 2]
+      set maxLabelLen 0
+
+      foreach {key} [array names $var] {
+        set currLabelLen [expr [string length $key] + $arrNameLen]
+        if {$currLabelLen > $maxLabelLen} {set maxLabelLen $currLabelLen}
       }
+
+      lappend arrVarsList "$var"
+      if {$maxLabelLen > $arrMaxLabelLen} {set arrMaxLabelLen $maxLabelLen}
+      continue
+    }
+
+    set type_str [::tcl::unsupported::representation [set $var]]
+    if {! [regexp $type_RE $type_str -> type]} {
+      set currLabelLen [string length $var]
+      if {$currLabelLen > $genMaxLabelLen} {set genMaxLabelLen $currLabelLen}
+      lappend genVarsList "$var"
+      continue
+    }
+
+    # Handle list vars
+    if {$type eq "list" && [llength [set $var]] > 0} {
+      # Plus 2 for parentheses + max index character-length
+      set maxLabelLen [expr [string length $var] + 2 + [string length [llength [set $var]]]]
+      if {$maxLabelLen > $lstMaxLabelLen} {set lstMaxLabelLen $maxLabelLen}
+      lappend lstVarsList "$var"
+      continue
+    }
+
+    # Handle all other vars
+    set currLabelLen [string length $var]
+    if {$currLabelLen > $genMaxLabelLen} {set genMaxLabelLen $currLabelLen}
+    lappend genVarsList "$var"
+    continue
+  }
+
+  foreach {item} $arrVarsList {
+    lappend maxLensList [list $item $arrMaxLabelLen]
+  }
+
+  foreach {item} $lstVarsList {
+    lappend maxLensList [list $item $lstMaxLabelLen]
+  }
+
+  foreach {item} $genVarsList {
+    lappend maxLensList [list $item $genMaxLabelLen]
+  }
+
+  return $maxLensList
+}
+
+proc print_all_vars {{ns ::}} {
+  set pat [set ns]::*
+  set type_RE {value is a (.+) with a refcount}
+  set CLR_FMT "\033\[0;0m"
+  set FMT_BLUE "\033\[0;34m"
+  set FMT_PURP "\033\[0;35m"
+  set FMT_LRED "\033\[0;91m"
+
+  set arrVarsList ""
+  set lstVarsList ""
+  set genVarsList ""
+
+  puts "~~~~~~~~~~~~~~~~~"
+  puts "\[${FMT_PURP}\+${CLR_FMT}] ${FMT_BLUE}ALL VARIABLES${CLR_FMT}"
+  puts "~~~~~~~~~~~~~~~~~"
+
+  set maxList [concat {*}[get_max_field_widths]]
+  array set labelLen $maxList
+
+  set all_vars [lsort [info vars $pat]]
+  foreach {var} $all_vars {
+    # Handle array vars
+    if {[array exists $var]} {
+      set arrNames [lsort [array names $var]]
+      foreach {key} $arrNames {
+        lappend arrVarsList [get_var_info "$var\($key\)" [lindex [array get $var $key] 1] $labelLen($var)]
+      }
+      continue
+    }
+
+    set type_str [::tcl::unsupported::representation [set $var]]
+    if {! [regexp $type_RE $type_str -> type]} {
+      lappend genVarsList [format "%${labelLen($var)}s ${FMT_LRED}%s${CLR_FMT} %s" $var "unknown" [set $var]]
+      continue
+    }
+
+    # Handle list vars
+    if {$type eq "list" && [llength [set $var]] > 0} {
+      set idx 0
+      foreach {lst_item} [set $var] {
+        lappend lstVarsList [get_var_info "$var\[$idx\]" $lst_item $labelLen($var)]
+        incr idx
+      }
+      continue
+    } else {
+      # Handle all other vars
+      lappend genVarsList [get_var_info "$var" [set $var] $labelLen($var)]
     }
   }
 
-  set CLRFMT "\033\[0;0m"
-  puts [format {%-8s %-34s %s} "TYPES" "NAMES" "VALUES"]
-  puts [format {%-8s %-34s %s} "*****" "*****" "******"]
-  foreach {n t} [lsort -stride 2 -index 1 [lsort -stride 2 $all_vars]] {
-    if {$t eq "empty string"} {
-      puts [format {%-8s %-34s ""} "string" $n]
-    } elseif {$t eq "string"} {
-      puts [format {%-8s %-34s %s} $t $n [set $n]]
-    } elseif {$t eq "integer"} {
-      puts [format {%-8s %-34s %d} $t $n [set $n]]
-    } elseif {$t eq "double"} {
-      puts [format {%-8s %-34s %.2f} $t $n [set $n]]
-    } elseif {$t eq "list" || $t eq "path"} {
-      set lst [lrange [set $n] 0 end]
-      set lst_len [llength $lst]
-      if {$lst_len > 1} {
-        set x 0
-        foreach {item} [set lst] {
-          if {[string length $item] > 38} {
-            if {$x == 0} {
-              puts [format {%-8s %-34s %-35s...} $t $n [string range $item 0 34]]
-            } else {
-              puts [format {%-8s %-34s %-35s...} "" "" [string range $item 0 34]]
-            }
-          } else {
-            if {$x == 0} {
-              puts [format {%-8s %-34s %-38s} $t $n $item]
-            } else {
-              puts [format {%-8s %-34s %-38s} "" "" $item]
-            }
-            incr x
-          }
-        }
-      } else {
-        puts [format {%-8s %-34s %s} $t $n $lst]
-      }
-    } elseif {$t eq "array"} {
-      foreach {k} [array names $n] {
-        set arrLabel "$n\($k\)"
-        set arrValue [lindex [array get $n $k] 1]
-        set val_strlen [string length $arrValue]
+  if {[llength $arrVarsList] > 0} {
+    foreach {arrItem} $arrVarsList {
+      puts $arrItem
+    }
+  }
 
-        if {$val_strlen > 38} {
-          puts ${CLRFMT}[format {%-8s %-34s %s...} $t $arrLabel [string range $arrValue 0 34]]${CLRFMT}
-        } else {
-          puts ${CLRFMT}[format {%-8s %-34s %-38s} $t $arrLabel $arrValue]${CLRFMT}
-        }
-      }
-    } else {
-      puts [format {%-8s %-34s %-38} $t $n [set $n]]
+  if {[llength $lstVarsList] > 0} {
+    foreach {lstItem} $lstVarsList {
+      puts $lstItem
+    }
+  }
+
+  if {[llength $genVarsList] > 0} {
+    foreach {genItem} $genVarsList {
+      puts $genItem
     }
   }
 }
 
-get_vars
+###[ RUN TESTS ]#################################
+array set LEVELS_DATA [list {maze}       {2225 9}    \
+                            {natas}      {0000 34}   \
+                            {utumno}     {2227 8}    \
+                            {narnia}     {2226 9}    \
+                            {vortex}     {2228 27}   \
+                            {bandit}     {2220 34}   \
+                            {krypton}    {2231 7}    \
+                            {manpage}    {2224 7}    \
+                            {drifter}    {2230 15}   \
+                            {behemoth}   {2221 8}    \
+                            {leviathan}  {2223 7}    \
+                            {formulaone} {2232 6}]
+
+test_level_parsing "LEVELS_DATA"
+print_all_vars
