@@ -32,6 +32,8 @@ proc show_usage { progname } {
   exit 1
 }
 
+
+
 proc parse_level { level lname lnum } {
   upvar $lname levelname
   upvar $lnum levelnum
@@ -104,8 +106,8 @@ proc get_saved_password { lname } {
 }
 
 proc get_level_password { lname lpass } {
-  set pass_fpath "$::env(HOME)/.otw/otw_passwords.txt"
   upvar $lpass levelpass
+  set pass_fpath "$::env(HOME)/.otw/otw_passwords.txt"
   set levelpass "?"
 
   if { [file exists "$pass_fpath"] } {
@@ -151,33 +153,15 @@ proc create_password_file {} {
     set lmax [lindex [split "$::LEVELS_DATA($name)" " "] 1]
     for { set i 0 } { $i <= $lmax } { incr i } {
       switch -exact -- "$name$i" {
-        "maze0" {
-          puts $pass_fd "$name$i maze0"
-        }
-        "natas0" {
-          puts $pass_fd "$name$i natas0"
-        }
-        "bandit0" {
-          puts $pass_fd "$name$i bandit0"
-        }
-        "narnia0" {
-          puts $pass_fd "$name$i narnia0"
-        }
-        "utumno0" {
-          puts $pass_fd "$name$i utumno0"
-        }
-        "manpage0" {
-          puts $pass_fd "$name$i manpage0"
-        }
-        "behemoth0" {
-          puts $pass_fd "$name$i behemoth0"
-        }
-        "leviathan0" {
-          puts $pass_fd "$name$i leviathan0"
-        }
-        default {
-          puts $pass_fd "$name$i ?"
-        }
+        "maze0" {puts $pass_fd "$name$i maze0"}
+        "natas0" {puts $pass_fd "$name$i natas0"}
+        "bandit0" {puts $pass_fd "$name$i bandit0"}
+        "narnia0" {puts $pass_fd "$name$i narnia0"}
+        "utumno0" {puts $pass_fd "$name$i utumno0"}
+        "manpage0" {puts $pass_fd "$name$i manpage0"}
+        "behemoth0" {puts $pass_fd "$name$i behemoth0"}
+        "leviathan0" {puts $pass_fd "$name$i leviathan0"}
+        default {puts $pass_fd "$name$i ?"}
       }
     }
   }
@@ -224,11 +208,9 @@ proc update_password_file { lname updated_pass } {
 proc handle_natas_levels { level lpass } {
   puts "\[*] Use a web browser to connect to natas levels:"
   puts "    Username: $level"
-
   if { "$lpass" ne "?" } {
     puts "    Password: $lpass"
   }
-
   puts "    Website:  http://$level.natas.labs.overthewire.org"
   return 0
 }
@@ -236,23 +218,28 @@ proc handle_natas_levels { level lpass } {
 proc connect_to_level { rhost rport level lpass } {
   set updated_pass "?"
 
+  set SSH_CMD [auto_execok "sshs"]
+  if {[string length $SSH_CMD] == 0} {
+    puts "\[-] Could not find \`ssh\` command on your system's executable path."
+    return 1
+  }
+
   send_user -- "\[*] Connecting to $rhost as $level...\n"
-  spawn ssh -p $rport "$level\@$rhost"
+  spawn $SSH_CMD -p $rport "$level\@$rhost"
 
   expect {
     # Handle first connect to server
     -re {yes/no.* $} {
       send -- "yes\r"
       exp_continue
-    }
-    -re {please try again.*: $} {
+    } -re {please try again.*: $} {
       send_user -- "\[-] Incorrect password. Enter the $level password: "
       expect_user -re {^(.*)\n$}
       set updated_pass $expect_out(1,string)
       send -- "$updated_pass\r"
       exp_continue
-    }
-    -re {.assword: $} {
+    
+    } -re {.assword: $} {
       if { "$lpass" ne "?" } {
         send -- "$lpass\r"
         exp_continue
@@ -262,18 +249,18 @@ proc connect_to_level { rhost rport level lpass } {
       set updated_pass $expect_out(1,string)
       send -- "$updated_pass\r"
       exp_continue
-    }
-    -re {\$ $} {
-      # Save password if it is different from the saved password
+    
+    } -re {\$ $} {
       if { "$updated_pass" ne "?" } {
+        # Save password if it is different from the saved password
         update_password_file "$lname" "$updated_pass"
         send_user -- "\[+] Saved password.\n"
       }
       send_user -- "\[+] Successfully logged in as $level.\n"
       send -- "\r"
       interact
-    }
-    timeout {
+    
+    } timeout {
       send_user -- "\[-] The connection timed out.\n"
       return 1
     }
@@ -295,8 +282,11 @@ proc main { args_list } {
   get_level_password "$level" lpass
 
   # Clean up global namespace
-  array unset ::LEVELS_DATA
+  #array unset ::LEVELS_DATA
 
+  source utils.tcl
+  return
+  
   if { "$lname" eq "natas" } {
     # Natas levels are accessed with a web browser
     handle_natas_levels "$level" "$lpass"
@@ -309,10 +299,10 @@ proc main { args_list } {
 }
 
 ###[ RUN MAIN PROGRAM ]##################################
-# if { $argc != 1 } {
-#   show_usage "$argv0"
-#   exit 1
-# } else {
-#   main "$argv"
-#   exit 0
-# }
+if { $argc != 1 } {
+  show_usage "$argv0"
+  exit 1
+} else {
+  main $argv
+  exit 0
+}

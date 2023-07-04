@@ -248,19 +248,10 @@ proc print_all_vars {{ns ::}} {
   }
 }
 
-###[ RUN TESTS ]#################################
-array set LEVELS_DATA [list {maze}       {2225 9}    \
-                            {natas}      {0000 34}   \
-                            {utumno}     {2227 8}    \
-                            {narnia}     {2226 9}    \
-                            {vortex}     {2228 27}   \
-                            {bandit}     {2220 34}   \
-                            {krypton}    {2231 7}    \
-                            {manpage}    {2224 7}    \
-                            {drifter}    {2230 15}   \
-                            {behemoth}   {2221 8}    \
-                            {leviathan}  {2223 7}    \
-                            {formulaone} {2232 6}]
+proc print_all_namespaces {{ns ::}} {
+  puts [list namespace $ns]
+  foreach child [namespace children $ns] {
+    puts [list namespace $child]
+  }
+}
 
-test_level_parsing "LEVELS_DATA"
-print_all_vars
