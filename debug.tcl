@@ -2,14 +2,15 @@
 
 ###[ TEST PROCS ]################################
 proc test_level_parsing {ldata_name} {
-  set parsing_list ""
-  set num_tests_failed 0
-  set num_tests_per_level 3
-  set CLR_FMT "\033\[0;0m"
-  set FMT_RED "\033\[0;31m"
-  set FMT_GRN "\033\[0;32m"
+  set CLR_FMT  "\033\[0;0m"
+  set FMT_RED  "\033\[0;31m"
+  set FMT_GRN  "\033\[0;32m"
   set FMT_BLUE "\033\[0;34m"
   set FMT_PURP "\033\[0;35m"
+  set parsing_list        ""
+  set num_tests_failed    0
+  set num_tests_per_level 3
+
   set LDATA_NAME_FQ [format {::%s} $ldata_name]
   set level_regex { *([[:alpha:]]+) *([[:digit:]]+) *}
 
@@ -74,19 +75,24 @@ proc get_var_info {varLabel varValue labelLen} {
 
   if {$type eq "pure string" && [string length $varValue] == 0} {
     return [format "%-${labelLen}s ${FMT_LPURP}%9s${CLR_FMT} \"\"" $varLabel "string"]
+  
   } elseif {($type eq "pure string" && [string is integer $varValue]) ||
              $type eq "integer" ||
              $type eq "int"} {
     return [format "%-${labelLen}s ${FMT_LGRN}%9s${CLR_FMT} %d" $varLabel "integer" $varValue]
+  
   } elseif {($type eq "pure string" && [string is double $varValue]) ||
              $type eq "double"} {
     return [format "%-${labelLen}s ${FMT_LCYAN}%9s${CLR_FMT} %.2f" $varLabel "double" $varValue]
+  
   } elseif {($type eq "pure string" || $type eq "string" || $type eq "path") &&
              [string length $varValue] > $defaultValLen} {
     set strItem [format "%s..." [string range $varValue 0 [expr {$defaultValLen - 4}]]]
     return [format "%-${labelLen}s ${FMT_LPURP}%9s${CLR_FMT} %s" $varLabel "string" $strItem]
+  
   } elseif {$type eq "pure string" || $type eq "string" || $type eq "path"} {
     return [format "%-${labelLen}s ${FMT_LPURP}%9s${CLR_FMT} %s" $varLabel "string" $varValue]
+  
   } elseif {[string length $varValue] > ${defaultValLen}} {
     set strItem [format "%s..." [string range $varValue 0 [expr {$defaultValLen - 4}]]]
     return [format "%-${labelLen}s %9s %s" $varLabel $type $strItem]
@@ -139,6 +145,7 @@ proc get_max_field_widths {{ns ::}} {
     set type_str [::tcl::unsupported::representation [set $var]]
     if {! [regexp $type_RE $type_str -> type]} {
       set currLabelLen [string length $var]
+  
       if {$currLabelLen > $genMaxLabelLen} {set genMaxLabelLen $currLabelLen}
       lappend genVarsList "$var"
       continue
@@ -148,7 +155,7 @@ proc get_max_field_widths {{ns ::}} {
     if {$type eq "list" && [llength [set $var]] > 0} {
       # Plus 2 for parentheses + max index character-length
       set maxLabelLen [expr [string length $var] + 2 + [string length [llength [set $var]]]]
-      if {$maxLabelLen > $lstMaxLabelLen} {set lstMaxLabelLen $maxLabelLen}
+        if {$maxLabelLen > $lstMaxLabelLen} {set lstMaxLabelLen $maxLabelLen}
       lappend lstVarsList "$var"
       continue
     }
@@ -180,7 +187,7 @@ proc print_all_vars {{ns ::}} {
   set FMT_BLUE    "\033\[0;34m"
   set FMT_PURP    "\033\[0;35m"
   set FMT_LRED    "\033\[0;91m"
-  set type_RE {value is a (.+) with a refcount}
+  set type_RE     {value is a (.+) with a refcount}
 
   set maxList [concat {*}[get_max_field_widths]]
   array set labelLen $maxList
@@ -190,6 +197,7 @@ proc print_all_vars {{ns ::}} {
     # Handle array vars
     if {[array exists $var]} {
       set arrNames [lsort [array names $var]]
+      
       foreach {key} $arrNames {
         lappend arrVarsList [get_var_info "$var\($key\)" [lindex [array get $var $key] 1] $labelLen($var)]
       }

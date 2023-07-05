@@ -1,26 +1,27 @@
-# OTW Level Connector (in-progress)
+# OverTheWire Level Connector
 
-A shell script that makes the process of connecting to [OverTheWire](https://overthewire.org/wargames/ "OTW")
-levels quicker and more convenient and keeps track of the level passwords
-that the user has uncovered.
+A shell script written in Expect/Tcl that makes the process of connecting
+to [OverTheWire](https://overthewire.org/wargames/ "OTW") levels quicker
+and more convenient.
 
-## Planned Features
+## Features
 
 - Stores the level passwords you've uncovered in a local file.
 - Connect to a level and start working by simply providing the level
   name (if the level's password has been stored; otherwise just enter it
-  during the connection process as per usual).
+  during the connection process as per usual and it will be saved for you
+  to use in the future).
 
 ## Requirements
 
+- Expect/Tcl
 - ssh
-- expect
 
 ## Usage
 
 ```
-usage: ./otw.exp <LEVEL>
-       ./otw.exp --password <PASSWORD> --level <LEVEL>
+usage: ./otw.exp LEVEL
+       ./otw.exp [-h] [--password PASSWORD] [--level LEVEL]
 ```
 
 ## Examples
