@@ -7,17 +7,17 @@
 #########################################################
 
 ###[ USER CONFIGS ]######################################
-set HOME_DIR         $::env(HOME)
-set DATA_DIR         ".otw"
-set DATA_FILENAME    "otw_data.txt"
-set DEFAULT_DIRPATH  [file join $::HOME_DIR $::DATA_DIR]
-set DEFAULT_FILEPATH [file join $::DEFAULT_DIRPATH $::DATA_FILENAME]
+set HOME_DIR          $::env(HOME)
+set DATA_DIR          ".otw"
+set DATA_FILENAME     "otw_data.txt"
+set DEFAULT_DIRPATH   [file join $::HOME_DIR $::DATA_DIR]
+set DEFAULT_FILEPATH  [file join $::DEFAULT_DIRPATH $::DATA_FILENAME]
 
 ###[ EXPECT CONFIGS ]####################################
-log_user     0
-exp_internal 0
-set timeout  10
-match_max    10000
+log_user          0
+exp_internal      0
+set timeout      10
+match_max     10000
 
 ###[ MAX LEVELS AND PORTS ]##############################
 array set LEVELDATA {
@@ -50,10 +50,10 @@ proc exit_usage {{msg {}}} {
   exit -1
 }
 
-proc exit_valid_levels {} {
+proc print_valid_levels {} {
   puts stderr "\[-\] Valid OTW levels are: bandit, natas, leviathan, krypton, narnia,"
   puts stderr "    behemoth, utumno, maze, vortex, manpage, drifter, and formulaone."
-  exit -1
+  return 0
 }
 
 proc handle_cmdline_opts {optslist levelarr} {
@@ -69,15 +69,15 @@ proc handle_cmdline_opts {optslist levelarr} {
       set optslist [lrange $optslist 1 end]
       break
     }
-    
-    # If not opt-like, then pop arg into removed_args list and continue
+
+    # If not opt-like, then pop argument into the removed_args list and continue
     if {[string equal -length 1 $current "-"]  != 1 &&
         [string equal -length 2 $current "--"] != 1} {
       lappend removed_args $current
       set optslist [lrange $optslist 1 end]
       continue
     }
-    
+
     set opt $current
     switch -exact -- $opt {
       {-l}         -
@@ -89,22 +89,21 @@ proc handle_cmdline_opts {optslist levelarr} {
         if {[string length $optarg] < 1} {
           exit_usage "Missing required argument for option \"$opt\"."
         }
-        if {[string equal $opt "-l"] == 1}     {set opt "level"} \
-        elseif {[string equal $opt "-p"] == 1} {set opt "password"}   
+
+        if {[string equal $opt "-l"] == 1}     {set opt "level"}  \
+        elseif {[string equal $opt "-p"] == 1} {set opt "password"}
         set LEVEL($opt) $optarg
         set optslist [lrange $optslist 1 end]
         continue
       }
       {-?}      -
       {-h}      -
-      {--help}  {exit_usage}
-      {-d}      -
-      {--debug} {
-        source "debug.tcl"
-        print_all_vars
-        exit 0
+      {--help}  {
+        exit_usage
       }
-      default {exit_usage "Unknown option \"$current\"."}
+      default {
+        exit_usage "Unknown option \"$current\"."
+      }
     }
   }
 
@@ -112,7 +111,6 @@ proc handle_cmdline_opts {optslist levelarr} {
   if {[string length $LEVEL(level)] == 0} {
     set LEVEL(level) [list {*}$optslist {*}$removed_args]
   }
-
   return 0
 }
 
@@ -143,7 +141,10 @@ proc validate_level_arg {levelarr} {
     }
   }
 
-  if {! $name_is_valid} {return 1}
+  if {! $name_is_valid} {
+    print_valid_levels
+    return 1
+  }
 
   # Validate level number
   if {$LEVEL(num) < 0 || $LEVEL(num) > $levelmax} {
@@ -175,14 +176,13 @@ proc get_password_from_file {levelarr} {
       return 0
     }
   }
-
   close $pass_fd
   return 1
 }
 
 proc get_password {levelarr} {
   upvar $levelarr LEVEL
-  
+
   # Create a password file if one does not exist
   if {! [file exists $::DEFAULT_FILEPATH]} {
     set rv [create_password_file LEVEL]
@@ -191,7 +191,7 @@ proc get_password {levelarr} {
       return 1
     }
   }
-  
+
   set rv [get_password_from_file LEVEL]
   if {$rv != 0} {
     puts stderr "\[-\] Unable to find any saved data for the current level."
@@ -217,20 +217,20 @@ proc create_password_file {levelarr} {
       return 1
     }
   }
-  
+
   # Bail out if a data file already exists and it contains data
   if {[file exist $::DEFAULT_FILEPATH] &&
       [file size $::DEFAULT_FILEPATH] != 0} {
     return 0
   }
-  
+
   # Create and open the new password file for writing
   if {[catch {open $::DEFAULT_FILEPATH w} pass_fd]} {
     puts stderr "\[-\] Cannot create a password file."
     return 1
+  } else {
+    puts stderr "\[+\] Created a password file at $::DEFAULT_FILEPATH"
   }
-
-  puts stderr "\[+\] Created a password file at $::DEFAULT_FILEPATH"
 
   # Write default data into the file
   foreach name [array names ::LEVELDATA] {
@@ -244,12 +244,8 @@ proc create_password_file {levelarr} {
         {utumno0}    -
         {manpage0}   -
         {behemoth0}  -
-        {leviathan0} {
-          puts $pass_fd "${name}${i} ${name}${i}"
-        }
-        default {
-          puts $pass_fd "${name}${i} ?"
-        }
+        {leviathan0} {puts $pass_fd "${name}${i} ${name}${i}"}
+        default      {puts $pass_fd "${name}${i} ?"}
       }
     }
   }
@@ -259,7 +255,7 @@ proc create_password_file {levelarr} {
 
 proc update_password_file {levelarr updated_pass} {
   upvar $levelarr LEVEL
-  
+
   if {! [file exist $::DEFAULT_FILEPATH]} {return 1}
   if {[catch {open $::DEFAULT_FILEPATH r} pass_fd]} {
     puts stderr "\[-\] Error opening password file."
@@ -275,7 +271,6 @@ proc update_password_file {levelarr updated_pass} {
   # Update the current level's password field
   while {[gets $pass_fd line] >= 0} {
     set lvlname [lindex [split $line " "] 0]
-
     if {[string equal $lvlname $LEVEL(level)] == 1} {
       puts $temp_fd "${lvlname} ${updated_pass}"
     } else {
@@ -320,15 +315,15 @@ proc connect_to_level {levelarr} {
     -re {yes/no.* $} {
       send -- "yes\r"
       exp_continue
-
-    } -re {please try again.*: $} {
+    }
+    -re {please try again.*: $} {
       send_user -- "\[-\] Incorrect password. Enter the $LEVEL(level) password: "
       expect_user -re {^(.*)\n$}
       set updated_pass $expect_out(1,string)
       send -- "$updated_pass\r"
       exp_continue
-
-    } -re {.assword: $} {
+    }
+    -re {.assword: $} {
       if {[string equal "?" "$LEVEL(password)"] != 1} {
         send -- "$LEVEL(password)\r"
         exp_continue
@@ -338,17 +333,17 @@ proc connect_to_level {levelarr} {
       set updated_pass $expect_out(1,string)
       send -- "$updated_pass\r"
       exp_continue
-
-    } -re {\$ $} {
+    }
+    -re {\$ $} {
       if {[string equal "?" "$updated_pass"] != 1} {
-        # Save updated password if it is different from the Password has been saved
+        # Save updated password if it is different from the saved password
         update_password_file LEVEL "$updated_pass"
         send_user -- "\[+\] Password has been saved.\n"
       }
       send_user -- "\[+\] Successfully logged in as $LEVEL(level).\n"
       send -- "\r"
-
-    } timeout {
+    }
+    timeout {
       send_user -- "\[-\] The connection timed out.\n"
       return 1
     }
@@ -365,13 +360,13 @@ proc run_program {argslist} {
   set LEVEL(port)      ""
   set LEVEL(level)     ""
   set LEVEL(password) "?"
-  
+
   set rv [handle_cmdline_opts $argslist LEVEL]
   if {$rv != 0} {return -1}
 
   set rv [parse_level_arg LEVEL]
   if {$rv != 0} {return -1}
-  
+
   set rv [validate_level_arg LEVEL]
   if {$rv != 0} {return -1}
 
@@ -392,7 +387,6 @@ proc run_program {argslist} {
   } else {
     connect_to_level LEVEL
   }
-
   return 0
 }
 
