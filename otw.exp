@@ -106,6 +106,12 @@ proc handle_cmdline_opts {optslist levelarr} {
       }
     }
   }
+  
+  if {[string equal "?" $LEVEL(password)] != 1} {
+    update_password_file LEVEL $LEVEL(password)
+    puts stderr "\[+\] Password saved."
+    return 0
+  }
 
   # If level was not set with -l, assign remaining non-option args to LEVEL(level)
   if {[string length $LEVEL(level)] == 0} {
@@ -311,7 +317,6 @@ proc connect_to_level {levelarr} {
   spawn ssh -p $LEVEL(port) "$LEVEL(level)\@$LEVEL(host)"
 
   expect {
-    # Handle first connect to server
     -re {yes/no.* $} {
       send -- "yes\r"
       exp_continue
@@ -338,7 +343,7 @@ proc connect_to_level {levelarr} {
       if {[string equal "?" "$updated_pass"] != 1} {
         # Save updated password if it is different from the saved password
         update_password_file LEVEL "$updated_pass"
-        send_user -- "\[+\] Password has been saved.\n"
+        send_user -- "\[+\] Password saved.\n"
       }
       send_user -- "\[+\] Successfully logged in as $LEVEL(level).\n"
       send -- "\r"
@@ -361,32 +366,22 @@ proc run_program {argslist} {
   set LEVEL(level)     ""
   set LEVEL(password) "?"
 
-  set rv [handle_cmdline_opts $argslist LEVEL]
-  if {$rv != 0} {return -1}
+  if {[handle_cmdline_opts $argslist LEVEL] != 0} {return -1}
 
-  set rv [parse_level_arg LEVEL]
-  if {$rv != 0} {return -1}
+  if {[parse_level_arg LEVEL] != 0} {return -1}
 
-  set rv [validate_level_arg LEVEL]
-  if {$rv != 0} {return -1}
+  if {[validate_level_arg LEVEL] != 0} {return -1}
 
-  if {[string equal "?" $LEVEL(password)] != 1} {
-    update_password_file LEVEL $LEVEL(password)
-    puts stderr "\[+\] Password has been saved."
-    return 0
-  } else {
-    set rv [get_password LEVEL]
-    if {$rv != 0} {return -1}
+  if {[string equal "?" $LEVEL(password)] == 1} {
+    if {[get_password LEVEL] != 0} {return -1}
   }
-
-#  puts stderr "~~~~~~~~~~~~~~~~~~~~"
-#  foreach {key} [array names LEVEL] {puts stderr "${key}: $LEVEL($key)"}
 
   if {[string equal "natas" $LEVEL(name)] == 1} {
     handle_natas_levels LEVEL
-  } else {
-    connect_to_level LEVEL
+    return 0
   }
+
+  connect_to_level LEVEL
   return 0
 }
 
@@ -394,9 +389,6 @@ proc run_program {argslist} {
 if {$::argc < 1} {
   exit_usage "Too few arguments."
 } else {
-  if {[run_program $::argv] != 0} {
-    exit -1
-  } else {
-    exit 0
-  }
+  if {[run_program $::argv] != 0} {exit -1} \
+  else {exit 0}
 }
