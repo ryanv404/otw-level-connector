@@ -370,7 +370,7 @@ proc run_program {argslist} {
   set rv [validate_level_arg LEVEL]
   if {$rv != 0} {return -1}
 
-  if {[string equal "?" LEVEL(password)] != 1} {
+  if {[string equal "?" $LEVEL(password)] != 1} {
     update_password_file LEVEL $LEVEL(password)
     puts stderr "\[+\] Password has been saved."
     return 0
@@ -379,8 +379,8 @@ proc run_program {argslist} {
     if {$rv != 0} {return -1}
   }
 
-  puts stderr "~~~~~~~~~~~~~~~~~~~~"
-  foreach {key} [array names LEVEL] {puts stderr "${key}: $LEVEL($key)"}
+#  puts stderr "~~~~~~~~~~~~~~~~~~~~"
+#  foreach {key} [array names LEVEL] {puts stderr "${key}: $LEVEL($key)"}
 
   if {[string equal "natas" $LEVEL(name)] == 1} {
     handle_natas_levels LEVEL
