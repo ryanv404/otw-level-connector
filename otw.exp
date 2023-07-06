@@ -374,6 +374,7 @@ proc connect_to_level {levelarr} {
   upvar $levelarr LEVEL
 
   set updated_pass "?"
+  set prompt "(%|>|:|\#|\\$) $"
 
   if {[string length [auto_execok "ssh"]] == 0} {
     print_error_msg "Could not find \`ssh\` command on your system's executable path."
@@ -391,7 +392,7 @@ proc connect_to_level {levelarr} {
     -re {denied.*assword: $} \
                      {handle_bad_pass LEVEL $spawn_id updated_pass; exp_continue}
     -re {assword: $} {handle_pass_prompt LEVEL $spawn_id updated_pass; exp_continue}
-    -re {\$ $}       {handle_shell_prompt LEVEL $spawn_id "$updated_pass"}
+    -re $prompt      {handle_shell_prompt LEVEL $spawn_id "$updated_pass"}
     timeout          {handle_timeout; return 1}
     eof              {handle_eof "${expect_out(buffer)}"; return 1}
   }
