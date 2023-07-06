@@ -17,7 +17,7 @@ set DEFAULT_FILEPATH  [file join $::DEFAULT_DIRPATH $::DATA_FILENAME]
 log_user          0
 exp_internal      0
 set timeout      10
-match_max     10000
+match_max    100000
 
 ###[ MAX LEVELS AND PORTS ]##############################
 array set LEVELDATA {
@@ -107,16 +107,21 @@ proc handle_cmdline_opts {optslist levelarr} {
     }
   }
   
-  if {[string equal "?" $LEVEL(password)] != 1} {
-    update_password_file LEVEL $LEVEL(password)
-    puts stderr "\[+\] Password saved."
-    return 0
-  }
-
   # If level was not set with -l, assign remaining non-option args to LEVEL(level)
   if {[string length $LEVEL(level)] == 0} {
     set LEVEL(level) [list {*}$optslist {*}$removed_args]
   }
+
+  if {[string equal "?" $LEVEL(password)] != 1} {
+    if {[update_password_file LEVEL $LEVEL(password)] != 0} {
+      puts stderr "\[-\] Password could not be saved."
+      exit -1
+    } else {
+      puts stderr "\[+\] Password saved."
+      exit 0
+    }
+  }
+
   return 0
 }
 
@@ -156,7 +161,7 @@ proc validate_level_arg {levelarr} {
   if {$LEVEL(num) < 0 || $LEVEL(num) > $levelmax} {
     set min [format "%s0" $LEVEL(name)]
     set max [format "%s%d" $LEVEL(name) $levelmax]
-    puts "\[-] Valid $LEVEL(name) levels are: $min - $max."
+    puts stderr "\[-\] Valid $LEVEL(name) levels are: $min - $max."
     return 1
   }
 
@@ -169,7 +174,7 @@ proc get_password_from_file {levelarr} {
   upvar $levelarr LEVEL
 
   if {[catch {open $::DEFAULT_FILEPATH r} pass_fd]} {
-    puts "\[-\] Unable to open the password file."
+    puts stderr "\[-\] Unable to open the password file."
     return 1
   }
 
@@ -200,7 +205,7 @@ proc get_password {levelarr} {
 
   set rv [get_password_from_file LEVEL]
   if {$rv != 0} {
-    puts stderr "\[-\] Unable to find any saved data for the current level."
+    puts stderr "\[-\] Unable to find any saved data for \"$LEVEL(level)\"."
   }
   return 0
 }
@@ -232,7 +237,7 @@ proc create_password_file {levelarr} {
 
   # Create and open the new password file for writing
   if {[catch {open $::DEFAULT_FILEPATH w} pass_fd]} {
-    puts stderr "\[-\] Cannot create a password file."
+    puts stderr "\[-\] Could not create a password file."
     return 1
   } else {
     puts stderr "\[+\] Created a password file at $::DEFAULT_FILEPATH"
@@ -263,22 +268,19 @@ proc update_password_file {levelarr updated_pass} {
   upvar $levelarr LEVEL
 
   if {! [file exist $::DEFAULT_FILEPATH]} {return 1}
-  if {[catch {open $::DEFAULT_FILEPATH r} pass_fd]} {
-    puts stderr "\[-\] Error opening password file."
-    return 1
-  }
+
+  if {[catch {open $::DEFAULT_FILEPATH r} pass_fd]} {return 1}
 
   set temp_filepath [file join $::DEFAULT_DIRPATH "tempfile.txt"]
-  if {[catch {open $temp_filepath w} temp_fd]} {
-    puts stderr "\[-\] Error creating a temporary file."
-    return 1
-  }
+  if {[catch {open $temp_filepath w} temp_fd]} {return 1}
 
   # Update the current level's password field
+  set pass_was_updated 0
   while {[gets $pass_fd line] >= 0} {
     set lvlname [lindex [split $line " "] 0]
     if {[string equal $lvlname $LEVEL(level)] == 1} {
       puts $temp_fd "${lvlname} ${updated_pass}"
+      set pass_was_updated 1
     } else {
       puts $temp_fd "$line"
     }
@@ -289,6 +291,12 @@ proc update_password_file {levelarr updated_pass} {
 
   # Replace old password file with the new file
   file rename -force -- $temp_filepath $::DEFAULT_FILEPATH
+  
+  if {! $pass_was_updated} {
+    puts stderr "\[-\] Could not locate $LEVEL(level) entry in the password file."
+    return 1
+  }
+  
   return 0
 }
 
@@ -304,57 +312,92 @@ proc handle_natas_levels {levelarr} {
   return 0
 }
 
+proc handle_newhost {levelarr spnid} {
+  upvar $levelarr LEVEL
+
+  send -i $spnid -- "yes\r"
+  send_user -- "\[*\] $LEVEL(host) was added as a known host.\n"
+  return
+}
+
+proc handle_timeout {} {
+  send_user -- "\n\[-\] The connection timed out.\n"
+  return
+}
+
+proc handle_eof {buf} {
+  set too_many_attempts_RE {Permission denied \(publickey\,password\)\.}
+  if {[regexp $too_many_attempts_RE $buf)] == 1} {
+    send_user -- "\[-\] Max number of attempts exceeded.\n"
+  }
+  return
+}
+
 proc connect_to_level {levelarr} {
   upvar $levelarr LEVEL
 
+  set rv 0
+  set updated_pass "?"
+  
   if {[string length [auto_execok "ssh"]] == 0} {
-    puts "\[-\] Could not find \`ssh\` command on your system's executable path."
+    puts stderr "\[-\] Could not find \`ssh\` command on your system's executable path."
     return 1
   }
 
-  set updated_pass "?"
   send_user -- "\[*\] Connecting to $LEVEL(host) as $LEVEL(level)...\n"
   spawn ssh -p $LEVEL(port) "$LEVEL(level)\@$LEVEL(host)"
 
+  set ::timeout 2
   expect {
-    -re {yes/no.* $} {
-      send -- "yes\r"
-      exp_continue
-    }
-    -re {please try again.*: $} {
+    -re {yes/no.* $} {handle_newhost LEVEL $spawn_id}
+  }
+
+  set ::timeout 10
+  expect {
+    -re {please try again.*assword: $} {
       send_user -- "\[-\] Incorrect password. Enter the $LEVEL(level) password: "
       expect_user -re {^(.*)\n$}
-      set updated_pass $expect_out(1,string)
-      send -- "$updated_pass\r"
+
+      if {[info exist expect_out(1,string)]} {
+        set updated_pass $expect_out(1,string)
+        send -- "$updated_pass\r"
+      }
       exp_continue
     }
     -re {.assword: $} {
       if {[string equal "?" "$LEVEL(password)"] != 1} {
         send -- "$LEVEL(password)\r"
-        exp_continue
+      } else {
+        send_user -- "\[*\] Enter the $LEVEL(level) password: "
+        expect_user -re {^(.*)\n$}
+
+        if {[info exist expect_out(1,string)]} {
+          set updated_pass $expect_out(1,string)
+          send -- "$updated_pass\r"
+        }
       }
-      send_user -- "\[*\] Enter the $LEVEL(level) password: "
-      expect_user -re {^(.*)\n$}
-      set updated_pass $expect_out(1,string)
-      send -- "$updated_pass\r"
       exp_continue
     }
     -re {\$ $} {
       if {[string equal "?" "$updated_pass"] != 1} {
-        # Save updated password if it is different from the saved password
-        update_password_file LEVEL "$updated_pass"
-        send_user -- "\[+\] Password saved.\n"
+        if {[update_password_file LEVEL "$updated_pass"] != 0} {
+          send_user -- "\[-\] Password could not be saved.\n"
+        } else {
+          send_user -- "\[+\] Password saved.\n"
+        }
       }
-      send_user -- "\[+\] Successfully logged in as $LEVEL(level).\n"
+      send_user -- "\[+\] Logged in as $LEVEL(level).\n"
       send -- "\r"
     }
-    timeout {
-      send_user -- "\[-\] The connection timed out.\n"
-      return 1
-    }
+    timeout {handle_timeout; return 1}
+    eof {handle_eof "${expect_out(buffer)}"; return 1}
   }
+
+  #puts "before interact block"
   interact
-  return 0
+  #puts "after interact block"
+
+  return 0 
 }
 
 ###[ MAIN FUNCTION ]#####################################
@@ -366,14 +409,14 @@ proc run_program {argslist} {
   set LEVEL(level)     ""
   set LEVEL(password) "?"
 
-  if {[handle_cmdline_opts $argslist LEVEL] != 0} {return -1}
+  if {[handle_cmdline_opts $argslist LEVEL] != 0} {return 1}
 
-  if {[parse_level_arg LEVEL] != 0} {return -1}
+  if {[parse_level_arg LEVEL] != 0} {return 1}
 
-  if {[validate_level_arg LEVEL] != 0} {return -1}
+  if {[validate_level_arg LEVEL] != 0} {return 1}
 
   if {[string equal "?" $LEVEL(password)] == 1} {
-    if {[get_password LEVEL] != 0} {return -1}
+    if {[get_password LEVEL] != 0} {return 1}
   }
 
   if {[string equal "natas" $LEVEL(name)] == 1} {
@@ -381,13 +424,14 @@ proc run_program {argslist} {
     return 0
   }
 
-  connect_to_level LEVEL
+  if {[connect_to_level LEVEL] != 0} {return 1}
+
   return 0
 }
 
 ###[ RUN PROGRAM ]#######################################
 if {$::argc < 1} {
-  exit_usage "Too few arguments."
+  exit_usage
 } else {
   if {[run_program $::argv] != 0} {exit -1} \
   else {exit 0}
