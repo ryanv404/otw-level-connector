@@ -43,6 +43,6 @@ proc clean_up_spinner {width} {
   return
 }
 
-#TODO find a way to mimic bash's `trap clean_up ERR` command to handle interruptions.
+#TODO find a way to mimic bash's `trap clean_up EXIT` command to handle interruptions.
 
 run_spinner $SPINNER_LEN $DELAY
