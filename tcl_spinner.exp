@@ -1,0 +1,85 @@
+#!/usr/bin/env expect
+
+set FRAME_DELAY 0.1
+set SLIDER_LEN 5
+set PADDING_CHAR "."
+set SLIDER_CHARS [list "/" "\\"]
+set SPINNER_CHARS [list "/" "-" "\\" "|"]
+
+proc scr_init {} {
+  exec tput civis >@stdout
+  return
+}
+
+proc scr_cleanup {maxlen cleanup_var} {
+  upvar $cleanup_var needs_cleanup
+
+  if {$needs_cleanup == 1} {
+    # Add 3 for the matching brackets and moving char
+    set maxlen [expr {$maxlen + 3}]
+    puts -nonewline stderr [format "\r%s\r" [string repeat " " $maxlen]]
+    exec tput cnorm >@stdout
+    set needs_cleanup 0
+  }
+  return
+}
+
+proc run_spinner {delay spinner_chars} {
+  set FMT_GRN "\033\[1;32m"
+  set FMT_CLR "\033\[0;0m"
+
+  set tot_frames [llength $spinner_chars]
+
+  for {set i 0} {$i < 60} {incr i} {
+    set frame_idx [expr {$i % $tot_frames}]
+    set fmtstr [format "\[${FMT_GRN}%s${FMT_CLR}\]\r" [lindex $spinner_chars $frame_idx]]
+    puts -nonewline stderr $fmtstr
+    sleep $delay
+  }
+  return
+}
+
+proc run_slider {delay len padchar slider_chars} {
+  set FMT_GRN "\033\[1;32m"
+  set FMT_CLR "\033\[0;0m"
+
+  set chars_idx 0
+  set slider_listlen [llength $slider_chars]
+  set slider_char [lindex $slider_chars $chars_idx]
+  set tot_frames [expr {$len * 2}]
+
+  for {set i 0} {$i < 60} {incr i} {
+    set frame [expr {$i % $tot_frames}]
+    if {$frame == 0 && $i != 0} {
+      incr chars_idx
+      set chars_idx [expr {$chars_idx % $slider_listlen}]
+      set slider_char [lindex $slider_chars $chars_idx]
+    } elseif {$frame == $len} {
+      incr chars_idx
+      set chars_idx [expr {$chars_idx % $slider_listlen}]
+      set slider_char [lindex $slider_chars $chars_idx]
+    }
+
+    if {$frame < $len} {
+      set lhs [string repeat $padchar $frame]
+      set rhs [string repeat $padchar [expr {$len - $frame}]]
+    } else {
+      set lhs [string repeat $padchar [expr {$tot_frames - $frame}]]
+      set rhs [string repeat $padchar [expr {$frame - $len}]]
+    }
+
+    set fmtstr [format "\[%s${FMT_GRN}%s${FMT_CLR}%s\]\r" $lhs $slider_char $rhs]
+    puts -nonewline stderr $fmtstr
+    sleep $delay
+  }
+  return
+}
+
+scr_init
+set NEEDS_CLEANUP 1
+
+run_spinner $FRAME_DELAY $SPINNER_CHARS
+run_slider $FRAME_DELAY $SLIDER_LEN $PADDING_CHAR $SLIDER_CHARS
+
+scr_cleanup $SLIDER_LEN NEEDS_CLEANUP
+exit 0
