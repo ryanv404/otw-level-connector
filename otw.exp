@@ -1,25 +1,25 @@
 #!/usr/bin/env expect
-#########################################################
-# BY:    ryanv404, 2023.                                #
-# DESC:  Expect script that connects to OTW levels via  #
-#        SSH and manages level passwords.               #
-# USAGE: ./otw.exp LEVEL                                #
-#########################################################
+#####################################################################
+# BY:    ryanv404, 2023.                                            #
+# DESC:  Expect script that connects to OTW levels via SSH and      #
+#        manages level passwords.                                   #
+# USAGE: ./otw.exp [-h] [-p PASSWORD] [-l] LEVEL                    #
+#####################################################################
 
-###[ USER CONFIGS ]######################################
+###[ USER CONFIGS ]##################################################
 set HOME_DIR          $::env(HOME)
 set DATA_DIR          ".otw"
 set DATA_FILENAME     "otw_data.txt"
 set DEFAULT_DIRPATH   [file join $::HOME_DIR $::DATA_DIR]
 set DEFAULT_FILEPATH  [file join $::DEFAULT_DIRPATH $::DATA_FILENAME]
 
-###[ EXPECT CONFIGS ]####################################
+###[ EXPECT CONFIGS ]################################################
 log_user      0
 exp_internal  0
 set timeout   10
 match_max     100000
 
-###[ MAX LEVELS AND PORTS ]##############################
+###[ MAX LEVELS AND PORTS ]##########################################
 array set LEVELDATA {
   {natas}         {0 34}
   {maze}        {2225 9}
@@ -35,7 +35,7 @@ array set LEVELDATA {
   {drifter}    {2230 15}
 }
 
-###[ PROCEDURES ]########################################
+###[ PROCEDURES ]####################################################
 proc print_error_msg {msg} {
   puts stderr [format "\[-\] %s" $msg]
   return
@@ -51,7 +51,7 @@ proc exit_usage {{msg {}}} {
     puts stderr [format "\[-\] %s" $msg]
   }
   puts stderr "usage:"
-  puts stderr "  $::argv0 \[-h\] \[-p PASSWORD\] \[-l LEVEL\] LEVEL"
+  puts stderr "  $::argv0 \[-h\] \[-p PASSWORD\] \[-l\] LEVEL"
   exit -1
 }
 
@@ -61,6 +61,21 @@ proc print_valid_levels {} {
   return 0
 }
 
+proc handle_natas_levels {levelarr} {
+  upvar $levelarr LEVEL
+
+  puts "\[*\] Use a web browser to connect to natas levels:"
+  puts "    Username: $LEVEL(level)"
+
+  if {[string equal $LEVEL(password) "?"] != 1} {
+    puts "    Password: $LEVEL(password)"
+  }
+
+  puts "    Website:  http://$LEVEL(level).natas.labs.overthewire.org"
+  return 0
+}
+
+###[ CMDLINE OPTION PARSING PROC ]###################################
 proc handle_cmdline_opts {optslist levelarr} {
   upvar $levelarr LEVEL
 
@@ -120,6 +135,7 @@ proc handle_cmdline_opts {optslist levelarr} {
   return 0
 }
 
+###[ INPUT VALIDATION PROCS ]########################################
 proc parse_level_arg {levelarr} {
   upvar $levelarr LEVEL
 
@@ -165,14 +181,16 @@ proc validate_level_arg {levelarr} {
   return 0
 }
 
+###[ LOCAL DATA I/O PROCS ]##########################################
 proc get_saved_password {levelarr} {
   upvar $levelarr LEVEL
 
   set pass_str "?"
 
   # Create a password file if one does not exist
-  if {! [file exists $::DEFAULT_FILEPATH]} {
-    if {[create_password_file LEVEL] != 0} {return $pass_str}
+  if {[file exists $::DEFAULT_FILEPATH] == 0 &&
+      [create_password_file LEVEL]      != 0} {
+    return $pass_str
   }
 
   if {[catch {open $::DEFAULT_FILEPATH r} pass_fd]} {
@@ -286,18 +304,7 @@ proc update_password_file {levelarr updated_pass} {
   return 0
 }
 
-proc handle_natas_levels {levelarr} {
-  upvar $levelarr LEVEL
-
-  puts "\[*\] Use a web browser to connect to natas levels:"
-  puts "    Username: $LEVEL(level)"
-  if {[string equal $LEVEL(password) "?"] != 1} {
-    puts "    Password: $LEVEL(password)"
-  }
-  puts "    Website:  http://$LEVEL(level).natas.labs.overthewire.org"
-  return 0
-}
-
+###[ EXPECT SSH CONNECTION PROCS ]###################################
 proc handle_newhost {levelarr ssh_id} {
   upvar $levelarr LEVEL
 
@@ -331,7 +338,7 @@ proc handle_pass_prompt {levelarr ssh_id newpass} {
     send_user -- "\[*\] Enter the $LEVEL(level) password: "
     expect_user -re {^(.*)\n$}
     if {[info exist expect_out(1,string)]} {
-      set updated_pass $expect_out(1,string)
+      set updated_pass "$expect_out(1,string)"
     } else {
       send_error -- "\n\[-\] Unable to process user input.\n"
     }
@@ -347,7 +354,7 @@ proc handle_bad_pass {levelarr ssh_id newpass} {
   send_user -- "\[-\] Incorrect password. Enter the $LEVEL(level) password: "
   expect_user -re {^(.*)\n$}
   if {[info exist expect_out(1,string)]} {
-    set updated_pass $expect_out(1,string)
+    set updated_pass "$expect_out(1,string)"
   } else {
     send_error -- "\n\[-\] Unable to process user input.\n"
   }
@@ -371,18 +378,16 @@ proc handle_eof {buf ssh_id} {
 }
 
 proc handle_cleanup {ssh_id} {
-  if {[catch {close -i $ssh_id} errmsg] != 0 &&
+  if {[catch {exp_close -i $ssh_id} errmsg] != 0 &&
       [regexp -- "not open" $errmsg]    == 0} {
     print_error_msg "Error while closing the ssh channel.\n$errmsg"
-    puts stderr "$errmsg"
   }
 
-  set waitres [wait -i $ssh_id]
+  set waitres [exp_wait -i $ssh_id]
   if {[info exist waitres] == 1 &&
       [llength $waitres]   == 4 &&
       [lindex $waitres 2]  == -1} {
     print_error_msg "An OS error (errno [lindex $waitres 3]) occured in the ssh process."
-    puts stderr "$::errorCode"
   }
   return
 }
@@ -391,14 +396,15 @@ proc connect_to_level {levelarr} {
   upvar $levelarr LEVEL
 
   set updated_pass "?"
-  set prompt "(\#|\\$) $"
+  set prompt_RE "(\#|\\$) $"
 
-  if {[string length [auto_execok "ssh"]] == 0} {
+  set SSH_CMD [auto_execok "ssh"]
+  if {[string length $SSH_CMD] == 0} {
     print_error_msg "Could not find \`ssh\` command on your system's executable path."
     return 1
   }
 
-  set rv [spawn ssh -p $LEVEL(port) "$LEVEL(level)\@$LEVEL(host)"]
+  set rv [spawn "$SSH_CMD" -p $LEVEL(port) "$LEVEL(level)\@$LEVEL(host)"]
   if {$rv == 0} {
     print_error_msg "Unable to spawn an ssh process."
     return 1
@@ -413,11 +419,11 @@ proc connect_to_level {levelarr} {
 
   expect {
     -re {denied.*assword: $} \
-                     {handle_bad_pass LEVEL $spawn_id updated_pass; exp_continue}
-    -re {assword: $} {handle_pass_prompt LEVEL $spawn_id updated_pass; exp_continue}
-    -re $prompt      {handle_shell_prompt LEVEL $spawn_id "$updated_pass"}
-    timeout          {handle_timeout $spawn_id; return 1}
-    eof              {handle_eof "${expect_out(buffer)}" $spawn_id; return 1}
+                      {handle_bad_pass LEVEL $spawn_id updated_pass; exp_continue}
+    -re {assword: $}  {handle_pass_prompt LEVEL $spawn_id updated_pass; exp_continue}
+    -re "$prompt_RE"  {handle_shell_prompt LEVEL $spawn_id "$updated_pass"}
+    timeout           {handle_timeout $spawn_id; return 1}
+    eof               {handle_eof "${expect_out(buffer)}" $spawn_id; return 1}
   }
 
   interact
@@ -426,13 +432,13 @@ proc connect_to_level {levelarr} {
   return 0
 }
 
-###[ MAIN FUNCTION ]#####################################
+###[ MAIN PROC ]#####################################################
 proc run_program {argslist} {
-  set LEVEL(num)        -1
-  set LEVEL(name)       ""
-  set LEVEL(host)       ""
-  set LEVEL(port)       ""
-  set LEVEL(level)      ""
+  set LEVEL(num)         -1
+  set LEVEL(name)        ""
+  set LEVEL(host)        ""
+  set LEVEL(port)        ""
+  set LEVEL(level)       ""
   set LEVEL(password)   "?"
 
   if {[handle_cmdline_opts $argslist LEVEL] != 0} {return 1}
@@ -450,19 +456,19 @@ proc run_program {argslist} {
     }
   }
 
-  # Returns "?" if there are any errors to allow user to input password later
+  # Returns "?" if there are any errors so user can input a password later
   set LEVEL(password) [get_saved_password LEVEL]
 
   if {[string equal "natas" $LEVEL(name)] == 1} {
     handle_natas_levels LEVEL
-    return 0
+  } else {
+    if {[connect_to_level LEVEL] != 0} {return 1}
   }
 
-  if {[connect_to_level LEVEL] != 0} {return 1}
   return 0
 }
 
-###[ RUN PROGRAM ]#######################################
+###[ RUN PROGRAM ]###################################################
 if {$::argc < 1}                  {exit_usage}
 if {[run_program $::argv] != 0}   {exit -1}
 exit 0
