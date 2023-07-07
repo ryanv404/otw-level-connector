@@ -76,6 +76,8 @@ proc run_slider {delay len padchar slider_chars} {
 }
 
 scr_init
+
+# Unneeded right now but will try to use it to mimic bash's `trap cleanup EXIT` command
 set NEEDS_CLEANUP 1
 
 run_spinner $FRAME_DELAY $SPINNER_CHARS
