@@ -1,0 +1,44 @@
+#!/usr/bin/env expect
+
+set DELAY 0.1
+set SPINNER_LEN 3
+set SPINNER_CHARS [list "/" "-" "\\" "|"]
+set MSG "Loading..."
+
+trap {scr_cleanup $SPINNER_LEN $MSG; exit 0;} SIGINT
+
+proc scr_init {} {
+  exec tput civis >@stdout
+  return
+}
+
+proc scr_cleanup {len msg} {
+  set strlen [string length $msg]
+  set maxlen [expr {$len + $strlen + 12}]
+  puts -nonewline [format "\r%s\r" [string repeat " " $maxlen]]
+  flush stdout
+  exec tput cnorm >@stdout
+  return
+}
+
+proc run_spinner {delay spinner_chars len msg} {
+  set FMT_GRN "\033\[1;32m"
+  set FMT_CLR "\033\[0;0m"
+  set tot_frames [llength $spinner_chars]
+
+  scr_init
+
+  for {set i 0} {$i < 60} {incr i} {
+    set frame_idx [expr {$i % $tot_frames}]
+    set fmtstr [format "\[${FMT_GRN}%s${FMT_CLR}\] %s\r" [lindex $spinner_chars $frame_idx] $msg]
+    puts -nonewline $fmtstr
+    flush stdout
+    sleep $delay
+  }
+
+  scr_cleanup $len $msg
+  return
+}
+
+run_spinner $DELAY $SPINNER_CHARS $SPINNER_LEN $MSG
+exit 0

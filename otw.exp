@@ -203,24 +203,23 @@ proc create_password_file {levelarr} {
   upvar $levelarr LEVEL
 
   # If home directory cannot be used, then use current directory
-  if {! [file exist $::HOME_DIR]       ||
-      ! [file isdirectory $::HOME_DIR] ||
-      ! [file writable $::HOME_DIR]}   {
+  if {[file exist $::HOME_DIR]       == 0 ||
+      [file isdirectory $::HOME_DIR] == 0 ||
+      [file writable $::HOME_DIR]    == 0} {
     print_error_msg "Unable to create a file in the home directory to store OTW passwords."
     return 1
   }
 
   # Create data directory if it does not exist
-  if {! [file exist $::DEFAULT_DIRPATH]} {
-    if {[catch {file mkdir $::DEFAULT_DIRPATH} err_msg]} {
-      print_error_msg "$err_msg"
-      return 1
-    }
+  if {[file exist $::DEFAULT_DIRPATH]                 == 0 &&
+      [catch {file mkdir $::DEFAULT_DIRPATH} err_msg] != 0} {
+    print_error_msg "$err_msg"
+    return 1
   }
 
   # Bail out if a data file already exists and it contains data
-  if {[file exist $::DEFAULT_FILEPATH] &&
-      [file size $::DEFAULT_FILEPATH] != 0} {
+  if {[file exist $::DEFAULT_FILEPATH] != 0 &&
+      [file size $::DEFAULT_FILEPATH]  != 0} {
     return 0
   }
 
@@ -284,7 +283,6 @@ proc update_password_file {levelarr updated_pass} {
     print_error_msg "Could not locate a \"$LEVEL(level)\" entry in the password file."
     return 1
   }
-
   return 0
 }
 
@@ -300,15 +298,15 @@ proc handle_natas_levels {levelarr} {
   return 0
 }
 
-proc handle_newhost {levelarr spnid} {
+proc handle_newhost {levelarr ssh_id} {
   upvar $levelarr LEVEL
 
-  exp_send -i $spnid -- "yes\r"
+  exp_send -i $ssh_id -- "yes\r"
   send_user -- "\[*\] $LEVEL(host) was added as a known host.\n"
   return
 }
 
-proc handle_shell_prompt {levelarr spnid newpass} {
+proc handle_shell_prompt {levelarr ssh_id newpass} {
   upvar $levelarr LEVEL
 
   if {[string equal "?" "$newpass"] != 1} {
@@ -319,16 +317,16 @@ proc handle_shell_prompt {levelarr spnid newpass} {
     }
   }
   send_user -- "\[+\] Logged in as $LEVEL(level).\n"
-  exp_send -i $spnid -- "\r"
+  exp_send -i $ssh_id -- "\r"
   return
 }
 
-proc handle_pass_prompt {levelarr spnid newpass} {
+proc handle_pass_prompt {levelarr ssh_id newpass} {
   upvar $levelarr LEVEL
   upvar $newpass updated_pass
 
   if {[string equal "?" "$LEVEL(password)"] != 1} {
-    exp_send -i $spnid -- "$LEVEL(password)\r"
+    exp_send -i $ssh_id -- "$LEVEL(password)\r"
   } else {
     send_user -- "\[*\] Enter the $LEVEL(level) password: "
     expect_user -re {^(.*)\n$}
@@ -337,12 +335,12 @@ proc handle_pass_prompt {levelarr spnid newpass} {
     } else {
       send_error -- "\n\[-\] Unable to process user input.\n"
     }
-    exp_send -i $spnid -- "$updated_pass\r"
+    exp_send -i $ssh_id -- "$updated_pass\r"
   }
   return
 }
 
-proc handle_bad_pass {levelarr spnid newpass} {
+proc handle_bad_pass {levelarr ssh_id newpass} {
   upvar $levelarr LEVEL
   upvar $newpass updated_pass
 
@@ -353,19 +351,38 @@ proc handle_bad_pass {levelarr spnid newpass} {
   } else {
     send_error -- "\n\[-\] Unable to process user input.\n"
   }
-  exp_send -i $spnid -- "$updated_pass\r"
+  exp_send -i $ssh_id -- "$updated_pass\r"
   return
 }
 
-proc handle_timeout {} {
+proc handle_timeout {ssh_id} {
   send_error -- "\n\[-\] The connection timed out.\n"
+  handle_cleanup $ssh_id
   return
 }
 
-proc handle_eof {buf} {
+proc handle_eof {buf ssh_id} {
   set too_many_attempts_RE {Permission denied \(publickey\,password\)\.}
   if {[regexp $too_many_attempts_RE $buf)] == 1} {
     send_error -- "\[-\] Max number of attempts exceeded.\n"
+  }
+  handle_cleanup $ssh_id
+  return
+}
+
+proc handle_cleanup {ssh_id} {
+  if {[catch {close -i $ssh_id} errmsg] != 0 &&
+      [regexp -- "not open" $errmsg]    == 0} {
+    print_error_msg "Error while closing the ssh channel.\n$errmsg"
+    puts stderr "$errmsg"
+  }
+
+  set waitres [wait -i $ssh_id]
+  if {[info exist waitres] == 1 &&
+      [llength $waitres]   == 4 &&
+      [lindex $waitres 2]  == -1} {
+    print_error_msg "An OS error (errno [lindex $waitres 3]) occured in the ssh process."
+    puts stderr "$::errorCode"
   }
   return
 }
@@ -374,18 +391,24 @@ proc connect_to_level {levelarr} {
   upvar $levelarr LEVEL
 
   set updated_pass "?"
-  set prompt "(%|>|:|\#|\\$) $"
+  set prompt "(\#|\\$) $"
 
   if {[string length [auto_execok "ssh"]] == 0} {
     print_error_msg "Could not find \`ssh\` command on your system's executable path."
     return 1
   }
 
-  spawn ssh -p $LEVEL(port) "$LEVEL(level)\@$LEVEL(host)"
+  set rv [spawn ssh -p $LEVEL(port) "$LEVEL(level)\@$LEVEL(host)"]
+  if {$rv == 0} {
+    print_error_msg "Unable to spawn an ssh process."
+    return 1
+  }
+
   send_user -- "\[*\] Connecting to $LEVEL(host) as $LEVEL(level)...\n"
 
   expect {
     -timeout 2 -re {yes/no.*$} {handle_newhost LEVEL $spawn_id}
+    -timeout 2 timeout
   }
 
   expect {
@@ -393,11 +416,13 @@ proc connect_to_level {levelarr} {
                      {handle_bad_pass LEVEL $spawn_id updated_pass; exp_continue}
     -re {assword: $} {handle_pass_prompt LEVEL $spawn_id updated_pass; exp_continue}
     -re $prompt      {handle_shell_prompt LEVEL $spawn_id "$updated_pass"}
-    timeout          {handle_timeout; return 1}
-    eof              {handle_eof "${expect_out(buffer)}"; return 1}
+    timeout          {handle_timeout $spawn_id; return 1}
+    eof              {handle_eof "${expect_out(buffer)}" $spawn_id; return 1}
   }
 
   interact
+
+  handle_cleanup $spawn_id
   return 0
 }
 
