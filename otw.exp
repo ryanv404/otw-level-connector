@@ -341,46 +341,86 @@ proc handle_shell_prompt {levelarr ssh_id new_pass} {
   return
 }
 
-proc handle_pass_prompt {levelarr ssh_id newpass} {
+proc handle_pass_prompt {levelarr ssh_id newpass attemptcode} {
   upvar $levelarr LEVEL
   upvar $newpass new_pass
+  upvar $attemptcode attempt_code
 
-  if {[string equal "?" "$LEVEL(password)"] != 1} {
-    exp_send -i "$ssh_id" -- "$LEVEL(password)\r"
-  } else {
-    send_user -- "\[*\] Enter the $LEVEL(level) password: "
-    expect_user -re {^(.*)\n$}
+  switch -exact -- $attempt_code {
+    {1} {
+      if {[string equal "?" "$LEVEL(password)"] != 1} {
+        exp_send -i "$ssh_id" -- "$LEVEL(password)\r"
+        set attempt_code 2
+        return
+      } else {
+        send_user -- "\[*\] Enter the $LEVEL(level) password: "
+        expect_user -re {^(.*)\n$}
 
-    if {[info exist expect_out(1,string)]} {
-      set new_pass "$expect_out(1,string)"
-    } else {
-      send_error -- "\n\[-\] Unable to process user input.\n"
+        if {[info exists expect_out(1,string)]} {
+          set new_pass "$expect_out(1,string)"
+        } else {
+          send_error -- "\n\[-\] Unable to process user input.\n"
+        }
+
+        exp_send -i "$ssh_id" -- "$new_pass\r"
+        set attempt_code 3
+      }
     }
-    exp_send -i "$ssh_id" -- "$new_pass\r"
+    {2} {
+      send_user -- "\[*\] Enter the $LEVEL(level) password: "
+      expect_user -re {^(.*)\n$}
+
+      if {[info exists expect_out(1,string)]} {
+        set new_pass "$expect_out(1,string)"
+      } else {
+        send_error -- "\n\[-\] Unable to process user input.\n"
+      }
+
+      exp_send -i "$ssh_id" -- "$new_pass\r"
+      set attempt_code 3
+    }
+    {3} {
+      send_user -- "\[-\] Incorrect password. Enter the $LEVEL(level) password: "
+      expect_user -re {^(.*)\n$}
+
+      if {[info exists expect_out(1,string)]} {
+        set new_pass "$expect_out(1,string)"
+      } else {
+        send_error -- "\n\[-\] Unable to process user input.\n"
+      }
+
+      exp_send -i "$ssh_id" -- "$new_pass\r"
+      set attempt_code 4
+
+      # Reset saved password to default "?" value if it was incorrect
+      if {[string equal "?" "$LEVEL(password)"] != 1} {
+        update_password_file LEVEL "?"
+      }
+    }
+    {4} {
+      send_user -- "\[-\] Incorrect password. Enter the $LEVEL(level) password: "
+      expect_user -re {^(.*)\n$}
+
+      if {[info exists expect_out(1,string)]} {
+        set new_pass "$expect_out(1,string)"
+      } else {
+        send_error -- "\n\[-\] Unable to process user input.\n"
+      }
+
+      exp_send -i "$ssh_id" -- "$new_pass\r"
+
+      # Reset saved password to default "?" value if it was incorrect
+      if {[string equal "?" "$LEVEL(password)"] != 1} {
+        update_password_file LEVEL "?"
+      }
+    }
+    default {
+      print_error "Error while processing user input"
+      cleanup_spawned_process "$ssh_id"
+      exit -1
+    }
   }
 
-  return
-}
-
-proc handle_incorrect_pass {levelarr ssh_id newpass} {
-  upvar $levelarr LEVEL
-  upvar $newpass new_pass
-
-  # Reset saved password to default "?" value if it was incorrect
-  if {[string equal "?" "$LEVEL(password)"] != 1} {
-    update_password_file LEVEL "?"
-  }
-
-  send_user -- "\[-\] Incorrect password. Enter the $LEVEL(level) password: "
-  expect_user -re {^(.*)\n$}
-
-  if {[info exist expect_out(1,string)]} {
-    set new_pass "$expect_out(1,string)"
-  } else {
-    send_error -- "\n\[-\] Unable to process user input.\n"
-  }
-
-  exp_send -i "$ssh_id" -- "$new_pass\r"
   return
 }
 
@@ -421,6 +461,7 @@ proc cleanup_spawned_process {ssh_id} {
 proc connect_to_level {levelarr} {
   upvar $levelarr LEVEL
 
+  set attempt_code 1
   set new_pass "?"
   set prompt_RE "(\#|\\$) $"
 
@@ -439,27 +480,16 @@ proc connect_to_level {levelarr} {
   set ssh_id "$spawn_id"
   send_user -- "\[*\] Connecting to $LEVEL(host) as $LEVEL(level)...\n"
 
-  set timeout 2
-  expect {
-    -re {yes/no.*$} {handle_new_host LEVEL "$ssh_id"}
-    timeout
-  }
-
   set timeout 10
   expect {
-    -re {denied.*assword: $} {handle_incorrect_pass LEVEL "$ssh_id" new_pass
-                              exp_continue}
-    -re {assword: $}         {handle_pass_prompt LEVEL "$ssh_id" new_pass
-                              exp_continue}
-    timeout          {handle_timeout LEVEL "$ssh_id"
-                      return 1}
-    eof              {too_many_attempts_check "$ssh_id" "$expect_out(buffer)"
-                      return 1}
+    -re {yes/no.*$}  {handle_new_host LEVEL "$ssh_id"; exp_continue}
+    -re {assword: $} {handle_pass_prompt LEVEL "$ssh_id" new_pass attempt_code; exp_continue}
+    timeout          {handle_timeout LEVEL "$ssh_id"; return 1}
+    eof              {too_many_attempts_check "$ssh_id" "$expect_out(buffer)"; return 1}
     -re "$prompt_RE" {handle_shell_prompt LEVEL "$ssh_id" "$new_pass"}
   }
 
   interact
-  puts "this is after expect and interact."
 
   cleanup_spawned_process "$ssh_id"
   return 0
@@ -482,10 +512,10 @@ proc run_program {argslist} {
   if {[string equal "?" "$LEVEL(password)"] != 1} {
     if {[update_password_file LEVEL "$LEVEL(password)"] != 0} {
       print_error "Password could not be saved."
-      exit -1
+      return 1
     } else {
       print_success "Password saved."
-      exit 0
+      return 0
     }
   }
 
