@@ -3,7 +3,7 @@
 set DELAY 0.1
 set SPINNER_LEN 3
 set SPINNER_CHARS [list "/" "-" "\\" "|"]
-set MSG "Loading..."
+set MSG "Connecting..."
 
 trap {scr_cleanup $SPINNER_LEN $MSG; exit 0;} SIGINT
 
@@ -28,7 +28,7 @@ proc run_spinner {delay spinner_chars len msg} {
 
   scr_init
 
-  for {set i 0} {$i < 60} {incr i} {
+  for {set i 0} {1} {incr i} {
     set frame_idx [expr {$i % $tot_frames}]
     set fmtstr [format "\[${FMT_GRN}%s${FMT_CLR}\] %s\r" [lindex $spinner_chars $frame_idx] $msg]
     puts -nonewline $fmtstr

@@ -234,7 +234,7 @@ proc create_password_file {levelarr} {
   upvar $levelarr LEVEL
 
   # If home directory cannot be used, then use current directory
-  if {[file exist "$::HOME_DIR"]       == 0 ||
+  if {[file exists "$::HOME_DIR"]       == 0 ||
       [file isdirectory "$::HOME_DIR"] == 0 ||
       [file writable "$::HOME_DIR"]    == 0} {
     print_error "Unable to create a file in the home directory to store OTW passwords."
@@ -242,14 +242,14 @@ proc create_password_file {levelarr} {
   }
 
   # Create data directory if it does not exist
-  if {[file exist "$::DEFAULT_DIRPATH"]                 == 0 &&
+  if {[file exists "$::DEFAULT_DIRPATH"]                 == 0 &&
       [catch {file mkdir "$::DEFAULT_DIRPATH"} err_msg] != 0} {
     print_error "$err_msg"
     return 1
   }
 
   # Bail out if a data file already exists and it contains data to avoid overwrites
-  if {[file exist "$::DEFAULT_FILEPATH"] != 0 &&
+  if {[file exists "$::DEFAULT_FILEPATH"] != 0 &&
       [file size "$::DEFAULT_FILEPATH"]  != 0} {
     return 0
   }
@@ -286,7 +286,7 @@ proc create_password_file {levelarr} {
 proc update_password_file {levelarr newpass} {
   upvar $levelarr LEVEL
 
-  if {! [file exist "$::DEFAULT_FILEPATH"]}           {return 1}
+  if {! [file exists "$::DEFAULT_FILEPATH"]}           {return 1}
   if {[catch {open "$::DEFAULT_FILEPATH" r} pass_fd]} {return 1}
 
   set temp_filepath [file join "$::DEFAULT_DIRPATH" "tempfile.txt"]
@@ -449,7 +449,7 @@ proc cleanup_spawned_process {ssh_id} {
   }
 
   set wres [exp_wait -i "$ssh_id"]
-  if {[info exist wres]   == 1 &&
+  if {[info exists wres]   == 1 &&
       [llength "$wres"]   == 4 &&
       [lindex "$wres" 2]  == -1} {
     print_error "An OS error (errno [lindex $wres 3]) occured in the ssh process."

@@ -4,7 +4,7 @@ set DELAY 0.1
 set SLIDER_LEN 5
 set PADDING_CHAR "."
 set SLIDER_CHARS [list "/" "\\"]
-set MSG "Loading..."
+set MSG "Connecting..."
 
 trap {scr_cleanup $SLIDER_LEN $MSG; exit 0;} SIGINT
 
@@ -33,7 +33,7 @@ proc run_slider {delay len padchar slider_chars msg} {
 
   scr_init
 
-  for {set i 0} {$i < 60} {incr i} {
+  for {set i 0} {1} {incr i} {
     set frame [expr {$i % $tot_frames}]
     if {$frame == 0 && $i != 0} {
       incr chars_idx
