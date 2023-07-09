@@ -13,9 +13,8 @@ set DATA_DIR          ".otw"
 set DATA_FILENAME     "otw_data.txt"
 set DEFAULT_DIR       [file join "$::HOME_DIR" "$::DATA_DIR"]
 set DEFAULT_FILEPATH  [file join "$::DEFAULT_DIR" "$::DATA_FILENAME"]
+set SCRIPT            [file normalize "$::argv0"]
 set SCRIPT_DIR        [file dirname [file normalize "$::argv0"]]
-set SLIDER_FILE       [file join "$::SCRIPT_DIR" "slider.tcl"]
-set SPINNER_FILE      [file join "$::SCRIPT_DIR" "spinner.tcl"]
 
 ###[ EXPECT CONFIGS ]################################################
 log_user      0
@@ -38,7 +37,7 @@ array set LEVELDATA {
   {drifter}    {2230 15}
 }
 
-###[ PROCEDURES ]####################################################
+###[ UTILITY PROCS ]##################################################
 proc pstderr {msg} {
   puts stderr "$msg"
   return
@@ -66,7 +65,7 @@ proc exit_msg {msg} {
 
 proc exit_usage {{msg {}}} {
   if {[string length $msg] != 0} {
-    pstderr [format "\[-\] %s" "$msg"]
+    pstderr [format "\[-\] %s\n" "$msg"]
   }
   pstderr "usage:"
   pstderr "  $::SCRIPT_NAME \[-h\] \[-p PASSWORD\] \[-l\] LEVEL"
@@ -125,7 +124,7 @@ proc handle_cmdline_opts {optslist levelarr} {
         set optslist [lrange "$optslist" 1 end]
         set optarg [lindex "$optslist" 0]
         if {[string length "$optarg"] < 1} {
-          exit_usage "Missing required argument for option \"$opt\"."
+          exit_usage "Missing required argument for option \"$opt\""
         }
 
         if {[string equal "$opt" "-l"]     == 1} {set opt "level"}  \
@@ -134,10 +133,24 @@ proc handle_cmdline_opts {optslist levelarr} {
         set optslist [lrange "$optslist" 1 end]
         continue
       }
+      {--_spinner1} -
+      {--_spinner2} {
+        set choice [string range "$opt" end end]
+        set loading_msg [format "Connecting to %s..." [lindex $optslist 1]]
+
+        if {$choice == 1} {
+          set slider_len 5
+          run_slider "$slider_len" "$loading_msg"
+        } else {
+          set spinner_len 3
+          run_spinner "$spinner_len" "$loading_msg"
+        }
+        exit 0
+      }
       {-?}      -
       {-h}      -
       {--help}  {exit_usage}
-      default   {exit_usage "Unknown option \"$current\"."}
+      default   {exit_usage "Unknown option \"$current\""}
     }
   }
 
@@ -147,6 +160,162 @@ proc handle_cmdline_opts {optslist levelarr} {
   }
 
   return 0
+}
+
+###[ LOADING SPINNER PROCS ]#########################################
+proc scr_init {has_tput tput_cmd} {
+  if {$has_tput} {
+    exec "$tput_cmd" civis >@stdout
+  } else {
+    chan puts "ASCII hide cursor sequence"
+    chan flush stdout
+  }
+  return
+}
+
+proc scr_cleanup {len msg has_tput tput_cmd} {
+  set strlen [string length "$msg"]
+  set maxlen [expr {$len + $strlen + 12}]
+
+  chan puts -nonewline [format "\r%s\r" [string repeat " " $maxlen]]
+  chan flush stdout
+
+  if {$has_tput} {
+    exec "$tput_cmd" cnorm >@stdout
+  } else {
+    chan puts "ASCII unhide cursor sequence"
+    chan flush stdout
+  }
+
+  return
+}
+
+proc run_slider {len msg} {
+  set FMT_GRN "\033\[1;32m"
+  set FMT_CLR "\033\[0;0m"
+
+  set delay 0.1
+  set padchar "."
+  lappend slider_chars "${FMT_GRN}/${FMT_CLR}"
+  lappend slider_chars "${FMT_GRN}\\${FMT_CLR}"
+
+  set chars_idx 0
+  set slider_listlen [llength "$slider_chars"]
+  set slider_char [lindex "$slider_chars" $chars_idx]
+  set tot_frames [expr {$len * 2}]
+
+  set has_tput 0
+  set tput_cmd [auto_execok "tput"]
+  if {[string length "$tput_cmd"] != 0} {set has_tput 1}
+
+  scr_init "$has_tput" "$tput_cmd"
+
+  chan configure stdin  -blocking 0 -buffering none
+  chan configure stdout -blocking 0 -buffering none
+  chan configure stderr -blocking 0 -buffering none
+
+  for {set i 0} {1} {incr i} {
+    set frame [expr {$i % $tot_frames}]
+    if {$frame == 0 && $i != 0} {
+      incr chars_idx
+      set chars_idx [expr {$chars_idx % $slider_listlen}]
+      set slider_char [lindex "$slider_chars" $chars_idx]
+    } elseif {$frame == $len} {
+      incr chars_idx
+      set chars_idx [expr {$chars_idx % $slider_listlen}]
+      set slider_char [lindex "$slider_chars" $chars_idx]
+    }
+
+    if {$frame < $len} {
+      set lhs [string repeat "$padchar" $frame]
+      set rhs [string repeat "$padchar" [expr {$len - $frame}]]
+    } else {
+      set lhs [string repeat "$padchar" [expr {$tot_frames - $frame}]]
+      set rhs [string repeat "$padchar" [expr {$frame - $len}]]
+    }
+
+    set fmtstr [format "\[%s%s%s\] %s\r" "$lhs" "$slider_char" "$rhs" "$msg"]
+    chan puts -nonewline "$fmtstr"
+    chan flush stdout
+
+    sleep $delay
+    if {[chan gets stdin] eq "die"} {break}
+  }
+
+  scr_cleanup "$len" "$msg" "$has_tput" "$tput_cmd"
+  return
+}
+
+proc run_spinner {len msg} {
+  set FMT_GRN "\033\[1;32m"
+  set FMT_CLR "\033\[0;0m"
+
+  set has_tput 0
+  set tput_cmd [auto_execok "tput"]
+  if {[string length "$tput_cmd"] != 0} {set has_tput 1}
+
+  lappend spinner_chars "${FMT_GRN}/${FMT_CLR}"
+  lappend spinner_chars "${FMT_GRN}-${FMT_CLR}"
+  lappend spinner_chars "${FMT_GRN}\\${FMT_CLR}"
+  lappend spinner_chars "${FMT_GRN}|${FMT_CLR}"
+  set tot_frames [llength "$spinner_chars"]
+  set delay 0.1
+
+  scr_init "$has_tput" "$tput_cmd"
+
+  chan configure stdin  -blocking 0 -buffering none
+  chan configure stdout -blocking 0 -buffering none
+  chan configure stderr -blocking 0 -buffering none
+
+  for {set i 0} {1} {incr i} {
+    set frame_idx [expr {$i % $tot_frames}]
+    set fmtstr [format "\[%s\] %s\r" [lindex "$spinner_chars" $frame_idx] "$msg"]
+
+    chan puts -nonewline "$fmtstr"
+    chan flush stdout
+
+    sleep $delay
+    if {[chan gets stdin] eq "die"} {break}
+  }
+
+  scr_cleanup "$len" "$msg" "$has_tput" "$tput_cmd"
+  return
+}
+
+proc start_spinner {levelarr} {
+  upvar $levelarr LEVEL
+
+  lappend script_args [info nameofexecutable]
+  lappend script_args "$::SCRIPT"
+
+  # I like the slider more so this makes it 3x more common :-)
+  if {[expr {int(rand() * 4)}] >= 1} {
+    lappend script_args "--_spinner1"
+  } else {
+    lappend script_args "--_spinner2"
+  }
+
+  lappend script_args "$LEVEL(host)"
+  lappend script_args ">&@stderr"
+
+  # Redirect subprocess' output to parent stderr (unbuffered by default)
+  set rv [catch {open |[list {*}$script_args] "w"} chan]
+  if {$rv > 0} {return ""}
+
+  chan configure $chan -blocking 0 -buffering none
+  return "$chan"
+}
+
+proc kill_spinner {spinner_id} {
+  if {$spinner_id in [file channels]} {
+    chan puts $spinner_id "die"
+
+    # Make channel blocking so that close waits for child to finish
+    chan configure $spinner_id -blocking 1
+    catch {chan close $spinner_id}
+  }
+
+  return
 }
 
 ###[ INPUT VALIDATION PROCS ]########################################
@@ -428,39 +597,6 @@ proc handle_pass_prompt {levelarr ssh_id newpass attemptcode spinner_id} {
       cleanup_spawned_process "$ssh_id"
       exit -1
     }
-  }
-
-  return
-}
-
-proc start_spinner {levelarr} {
-  upvar $levelarr LEVEL
-
-  # I like the slider more so this makes it 3x more common :-)
-  if {[expr {int(rand() * 4)}] >= 1} {
-    set spinner "$::SLIDER_FILE"
-  } else {
-    set spinner "$::SPINNER_FILE"
-  }
-
-  set interp [info nameofexecutable]
-  set msg "Connecting to $LEVEL(host)"
-
-  # Redirect subprocess' output to parent stderr (unbuffered by default)
-  set rv [catch {open |[list "$interp" "$spinner" "$msg" ">&@stderr"] "w"} chan]
-  if {$rv > 0} {return ""}
-
-  chan configure $chan -blocking 0 -buffering none
-  return "$chan"
-}
-
-proc kill_spinner {spinner_id} {
-  if {$spinner_id in [file channels]} {
-    chan puts $spinner_id "die"
-
-    # Make channel blocking so that close waits for child to finish
-    chan configure $spinner_id -blocking 1
-    catch {chan close $spinner_id}
   }
 
   return
