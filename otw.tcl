@@ -7,14 +7,16 @@
 #####################################################################
 
 ###[ USER CONFIGS ]##################################################
-set SCRIPT_NAME       "$::argv0"
 set HOME_DIR          "$::env(HOME)"
-set DATA_DIR          ".otw"
-set DATA_FILENAME     "otw_data.txt"
-set DEFAULT_DIR       [file join "$::HOME_DIR" "$::DATA_DIR"]
-set DEFAULT_FILEPATH  [file join "$::DEFAULT_DIR" "$::DATA_FILENAME"]
+set DEFAULT_DIR       [file join "$::HOME_DIR" ".otw"]
+set DEFAULT_FILEPATH  [file join "$::DEFAULT_DIR" "otw_data.txt"]
+set SCRIPT_NAME       "$::argv0"
 set SCRIPT            [file normalize "$::argv0"]
 set SCRIPT_DIR        [file dirname [file normalize "$::argv0"]]
+set SSH_CMD           [auto_execok "ssh"]
+set TPUT_CMD          [auto_execok "tput"]
+set HAS_SSH           [expr {[string length "$::SSH_CMD"] == 0 ? 0 : 1}]
+set HAS_TPUT          [expr {[string length "$::TPUT_CMD"] == 0 ? 0 : 1}]
 
 ###[ EXPECT CONFIGS ]################################################
 log_user      0
@@ -158,35 +160,33 @@ proc handle_cmdline_opts {optslist levelarr} {
   if {[string length "$LEVEL(level)"] == 0} {
     set LEVEL(level) [list {*}$optslist {*}$removed_args]
   }
-
   return 0
 }
 
 ###[ LOADING SPINNER PROCS ]#########################################
-proc scr_init {has_tput tput_cmd} {
-  if {$has_tput} {
-    exec "$tput_cmd" civis >@stdout
+proc scr_init {} {
+  if {$::HAS_TPUT} {
+    exec "$::TPUT_CMD" civis >@stdout
   } else {
-    chan puts "ASCII hide cursor sequence"
+    chan puts -nonewline "\033\[?25l"
     chan flush stdout
   }
   return
 }
 
-proc scr_cleanup {len msg has_tput tput_cmd} {
+proc scr_cleanup {len msg} {
   set strlen [string length "$msg"]
   set maxlen [expr {$len + $strlen + 12}]
 
   chan puts -nonewline [format "\r%s\r" [string repeat " " $maxlen]]
   chan flush stdout
 
-  if {$has_tput} {
-    exec "$tput_cmd" cnorm >@stdout
+  if {$::HAS_TPUT} {
+    exec "$::TPUT_CMD" cnorm >@stdout
   } else {
-    chan puts "ASCII unhide cursor sequence"
+    chan puts -nonewline "\033\[?25h"
     chan flush stdout
   }
-
   return
 }
 
@@ -200,15 +200,11 @@ proc run_slider {len msg} {
   lappend slider_chars "${FMT_GRN}\\${FMT_CLR}"
 
   set chars_idx 0
-  set slider_listlen [llength "$slider_chars"]
   set slider_char [lindex "$slider_chars" $chars_idx]
   set tot_frames [expr {$len * 2}]
+  set slider_listlen [llength "$slider_chars"]
 
-  set has_tput 0
-  set tput_cmd [auto_execok "tput"]
-  if {[string length "$tput_cmd"] != 0} {set has_tput 1}
-
-  scr_init "$has_tput" "$tput_cmd"
+  scr_init
 
   chan configure stdin  -blocking 0 -buffering none
   chan configure stdout -blocking 0 -buffering none
@@ -242,7 +238,7 @@ proc run_slider {len msg} {
     if {[chan gets stdin] eq "die"} {break}
   }
 
-  scr_cleanup "$len" "$msg" "$has_tput" "$tput_cmd"
+  scr_cleanup "$len" "$msg"
   return
 }
 
@@ -250,18 +246,14 @@ proc run_spinner {len msg} {
   set FMT_GRN "\033\[1;32m"
   set FMT_CLR "\033\[0;0m"
 
-  set has_tput 0
-  set tput_cmd [auto_execok "tput"]
-  if {[string length "$tput_cmd"] != 0} {set has_tput 1}
-
+  set delay 0.1
   lappend spinner_chars "${FMT_GRN}/${FMT_CLR}"
   lappend spinner_chars "${FMT_GRN}-${FMT_CLR}"
   lappend spinner_chars "${FMT_GRN}\\${FMT_CLR}"
   lappend spinner_chars "${FMT_GRN}|${FMT_CLR}"
   set tot_frames [llength "$spinner_chars"]
-  set delay 0.1
 
-  scr_init "$has_tput" "$tput_cmd"
+  scr_init
 
   chan configure stdin  -blocking 0 -buffering none
   chan configure stdout -blocking 0 -buffering none
@@ -278,7 +270,7 @@ proc run_spinner {len msg} {
     if {[chan gets stdin] eq "die"} {break}
   }
 
-  scr_cleanup "$len" "$msg" "$has_tput" "$tput_cmd"
+  scr_cleanup "$len" "$msg"
   return
 }
 
@@ -648,15 +640,14 @@ proc connect_to_level {levelarr} {
   set new_pass "?"
   set prompt_RE "(\#|\\$) $"
 
-  set SSH_CMD [auto_execok "ssh"]
-  if {[string length $SSH_CMD] == 0} {
+  if {"$::HAS_SSH" == 0} {
     print_error "Could not find \`ssh\` command on your system's executable path."
     return 1
   }
 
   set spinner [start_spinner LEVEL]
 
-  set rv [spawn "$SSH_CMD" -p $LEVEL(port) "$LEVEL(level)\@$LEVEL(host)"]
+  set rv [spawn "$::SSH_CMD" -p $LEVEL(port) "$LEVEL(level)\@$LEVEL(host)"]
   if {$rv == 0} {
     kill_spinner "$spinner"
     print_error "Unable to spawn an ssh process."
