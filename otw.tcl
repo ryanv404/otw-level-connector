@@ -327,7 +327,7 @@ proc handle_new_host {levelarr ssh_id} {
 
 proc handle_shell_prompt {levelarr ssh_id new_pass spinner_id} {
   upvar $levelarr LEVEL
-  puts stderr "\nin handle_shell_prompt\n"
+
   kill_spinner $spinner_id
 
   if {[string equal "?" "$new_pass"] != 1} {
@@ -371,7 +371,7 @@ proc handle_pass_prompt {levelarr ssh_id newpass attemptcode spinner_id} {
     }
     {2} {
       kill_spinner $spinner_id
-      
+
       send_user -- "\[*\] Enter the $LEVEL(level) password: "
       expect_user -re {^(.*)\n$}
 
@@ -448,12 +448,10 @@ proc start_spinner {levelarr} {
 }
 
 proc kill_spinner {spinner_id} {
-  puts stderr "\nin kill_spinner\n$spinner_id\n[file channels]\n"
-
   if {$spinner_id in [file channels]} {
     puts $spinner_id "die"
     flush $spinner_id
-    catch {close $spinner_id} err
+    catch {close $spinner_id} ->
   }
 
   return
@@ -463,7 +461,7 @@ proc handle_timeout {levelarr ssh_id spinner_id} {
   upvar $levelarr LEVEL
 
   kill_spinner $spinner_id
-  
+
   send_error -- "\n\[-\] Connection to $LEVEL(host) timed out.\n"
   cleanup_spawned_process "$ssh_id"
   return
@@ -489,7 +487,7 @@ proc cleanup_spawned_process {ssh_id} {
   }
 
   set wres [exp_wait -i "$ssh_id"]
-  if {[info exists wres]   == 1 &&
+  if {[info exists wres]  == 1 &&
       [llength "$wres"]   == 4 &&
       [lindex "$wres" 2]  == -1} {
     print_error "An OS error (errno [lindex $wres 3]) occured in the ssh process."
