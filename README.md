@@ -28,15 +28,15 @@ usage: ./otw.tcl [-h] [-p PASSWORD] [-l] LEVEL
 ## Examples
 
 ```bash
-# Connects to the OTW bandit 21 level via SSH, prompting for the
+# Connects to the OTW bandit 0 level via SSH, prompting for the
 # level's password during the connection process.
-./otw.tcl bandit21
+./otw.tcl bandit0
 
-# Stores a (p)assword for the OTW bandit 21 (l)evel so that
+# Stores a (p)assword for the OTW bandit 0 (l)evel so that
 # connecting to the level does not prompt for a password.
-./otw.tcl -p deadbeef -l bandit21  <-- Do this once.
+./otw.tcl -p bandit0 -l bandit0  <---- Do this once.
 
-./otw.tcl bandit21  <----------------- And from now on this will
+./otw.tcl bandit0  <------------------ And from now on this will
                                        connect automatically to
                                        the level.
 ```
