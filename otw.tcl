@@ -286,7 +286,7 @@ proc create_password_file {levelarr} {
 proc update_password_file {levelarr newpass} {
   upvar $levelarr LEVEL
 
-  if {! [file exists "$::DEFAULT_FILEPATH"]}           {return 1}
+  if {! [file exists "$::DEFAULT_FILEPATH"]}          {return 1}
   if {[catch {open "$::DEFAULT_FILEPATH" r} pass_fd]} {return 1}
 
   set temp_filepath [file join "$::DEFAULT_DIRPATH" "tempfile.txt"]
@@ -321,12 +321,14 @@ proc handle_new_host {levelarr ssh_id} {
   upvar $levelarr LEVEL
 
   exp_send -i "$ssh_id" -- "yes\r"
-  send_user -- "\[*\] $LEVEL(host) was added as a known host.\n"
+  #send_user -- "\[*\] $LEVEL(host) was added as a known host.\n"
   return
 }
 
-proc handle_shell_prompt {levelarr ssh_id new_pass} {
+proc handle_shell_prompt {levelarr ssh_id new_pass spinner_id} {
   upvar $levelarr LEVEL
+  puts stderr "\nin handle_shell_prompt\n"
+  kill_spinner $spinner_id
 
   if {[string equal "?" "$new_pass"] != 1} {
     if {[update_password_file LEVEL "$new_pass"] != 0} {
@@ -336,12 +338,11 @@ proc handle_shell_prompt {levelarr ssh_id new_pass} {
     }
   }
 
-  send_user -- "\[+\] Logged in as $LEVEL(level).\n"
   exp_send -i "$ssh_id" -- "\r"
   return
 }
 
-proc handle_pass_prompt {levelarr ssh_id newpass attemptcode} {
+proc handle_pass_prompt {levelarr ssh_id newpass attemptcode spinner_id} {
   upvar $levelarr LEVEL
   upvar $newpass new_pass
   upvar $attemptcode attempt_code
@@ -353,6 +354,8 @@ proc handle_pass_prompt {levelarr ssh_id newpass attemptcode} {
         set attempt_code 2
         return
       } else {
+        kill_spinner $spinner_id
+
         send_user -- "\[*\] Enter the $LEVEL(level) password: "
         expect_user -re {^(.*)\n$}
 
@@ -367,6 +370,8 @@ proc handle_pass_prompt {levelarr ssh_id newpass attemptcode} {
       }
     }
     {2} {
+      kill_spinner $spinner_id
+      
       send_user -- "\[*\] Enter the $LEVEL(level) password: "
       expect_user -re {^(.*)\n$}
 
@@ -415,6 +420,7 @@ proc handle_pass_prompt {levelarr ssh_id newpass attemptcode} {
       }
     }
     default {
+      kill_spinner $spinner_id
       print_error "Error while processing user input"
       cleanup_spawned_process "$ssh_id"
       exit -1
@@ -424,16 +430,50 @@ proc handle_pass_prompt {levelarr ssh_id newpass attemptcode} {
   return
 }
 
-proc handle_timeout {levelarr ssh_id} {
+proc start_spinner {levelarr} {
   upvar $levelarr LEVEL
 
+  if {[expr {int(rand() * 2)}] > 1} {
+    set spinner [file join [pwd] "slider.tcl"]
+  } else {
+    set spinner [file join [pwd] "spinner.tcl"]
+  }
+
+  set interp [info nameofexecutable]
+  set msg "Connecting to $LEVEL(host)"
+
+  set rv [catch {open |[list "$interp" "$spinner" "$msg"] "w"} spinner_id]
+  if {$rv > 0} {return ""}
+  return "$spinner_id"
+}
+
+proc kill_spinner {spinner_id} {
+  puts stderr "\nin kill_spinner\n$spinner_id\n[file channels]\n"
+
+  if {$spinner_id in [file channels]} {
+    puts $spinner_id "die"
+    flush $spinner_id
+    catch {close $spinner_id} err
+  }
+
+  return
+}
+
+proc handle_timeout {levelarr ssh_id spinner_id} {
+  upvar $levelarr LEVEL
+
+  kill_spinner $spinner_id
+  
   send_error -- "\n\[-\] Connection to $LEVEL(host) timed out.\n"
   cleanup_spawned_process "$ssh_id"
   return
 }
 
-proc too_many_attempts_check {ssh_id buf} {
+proc too_many_attempts_check {ssh_id buf spinner_id} {
   set too_many_attempts_RE {Permission denied \(publickey\,password\)\.}
+
+  kill_spinner $spinner_id
+
   if {[regexp "$too_many_attempts_RE" "$buf"] == 1} {
     send_error -- "\[-\] Max number of login attempts exceeded.\n"
   }
@@ -471,22 +511,24 @@ proc connect_to_level {levelarr} {
     return 1
   }
 
+  set spinner [start_spinner LEVEL]
+
   set rv [spawn "$SSH_CMD" -p $LEVEL(port) "$LEVEL(level)\@$LEVEL(host)"]
   if {$rv == 0} {
+    kill_spinner "$spinner"
     print_error "Unable to spawn an ssh process."
     return 1
   }
 
   set ssh_id "$spawn_id"
-  send_user -- "\[*\] Connecting to $LEVEL(host) as $LEVEL(level)...\n"
 
   set timeout 10
   expect {
     -re {yes/no.*$}  {handle_new_host LEVEL "$ssh_id"; exp_continue}
-    -re {assword: $} {handle_pass_prompt LEVEL "$ssh_id" new_pass attempt_code; exp_continue}
-    timeout          {handle_timeout LEVEL "$ssh_id"; return 1}
-    eof              {too_many_attempts_check "$ssh_id" "$expect_out(buffer)"; return 1}
-    -re "$prompt_RE" {handle_shell_prompt LEVEL "$ssh_id" "$new_pass"}
+    -re {assword: $} {handle_pass_prompt LEVEL "$ssh_id" new_pass attempt_code "$spinner"; exp_continue}
+    timeout          {handle_timeout LEVEL "$ssh_id" "$spinner"; return 1}
+    eof              {too_many_attempts_check "$ssh_id" "$expect_out(buffer)" "$spinner"; return 1}
+    -re "$prompt_RE" {handle_shell_prompt LEVEL "$ssh_id" "$new_pass" "$spinner"}
   }
 
   interact

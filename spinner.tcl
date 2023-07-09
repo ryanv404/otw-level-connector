@@ -1,7 +1,7 @@
 #!/usr/bin/env expect
 
 set SPINNER_LEN 3
-set MSG "Connecting..."
+set MSG [lindex $::argv 0]
 set HAS_TPUT 0
 
 trap {scr_cleanup $SPINNER_LEN $MSG; exit 0;} {INT QUIT}
@@ -44,14 +44,17 @@ proc run_spinner {len msg} {
   set tot_frames [llength $SPINNER_CHARS]
 
   scr_init
+  fconfigure stdin -blocking 0
 
   for {set i 0} {1} {incr i} {
     set frame_idx [expr {$i % $tot_frames}]
     set fmtstr [format "\[%s\] %s\r" [lindex $SPINNER_CHARS $frame_idx] $msg]
+
     puts -nonewline $fmtstr
     flush stdout
-    
+
     sleep $DELAY
+    if {[gets stdin] eq "die"} {break}
   }
 
   scr_cleanup "$len" "$msg"

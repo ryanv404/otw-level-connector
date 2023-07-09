@@ -1,7 +1,7 @@
 #!/usr/bin/env expect
 
 set SLIDER_LEN 5
-set MSG "Connecting..."
+set MSG [lindex $::argv 0]
 set HAS_TPUT 0
 
 trap {scr_cleanup $SLIDER_LEN $MSG; exit 0;} {INT QUIT}
@@ -20,7 +20,7 @@ proc scr_init {} {
 }
 
 proc scr_cleanup {len msg} {
-  set strlen [string length $msg]
+  set strlen [string length "$msg"]
   set maxlen [expr {$len + $strlen + 12}]
   puts -nonewline [format "\r%s\r" [string repeat " " $maxlen]]
   flush stdout
@@ -48,6 +48,7 @@ proc run_slider {len msg} {
   set tot_frames [expr {$len * 2}]
 
   scr_init
+  fconfigure stdin -blocking 0
 
   for {set i 0} {1} {incr i} {
     set frame [expr {$i % $tot_frames}]
@@ -74,6 +75,7 @@ proc run_slider {len msg} {
     flush stdout
 
     sleep $DELAY
+    if {[gets stdin] eq "die"} {break}
   }
 
   scr_cleanup $len $msg
