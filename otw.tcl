@@ -433,7 +433,8 @@ proc handle_pass_prompt {levelarr ssh_id newpass attemptcode spinner_id} {
 proc start_spinner {levelarr} {
   upvar $levelarr LEVEL
 
-  if {[expr {int(rand() * 2)}] > 1} {
+  # I like the slider more so this makes it 3x more common ;-)
+  if {[expr {int(rand() * 4)}] >= 1} {
     set spinner [file join [pwd] "slider.tcl"]
   } else {
     set spinner [file join [pwd] "spinner.tcl"]
