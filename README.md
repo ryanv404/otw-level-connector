@@ -1,27 +1,26 @@
 # OverTheWire Level Connector
 
-A shell script written in Expect/Tcl that makes the process of connecting
-to [OverTheWire](https://overthewire.org/wargames/ "OTW") levels quicker
-and more convenient.
+A shell script written in [Expect](https://www.tcl.tk/software/tcltk/ "Expect") that makes the process of connecting
+to [OverTheWire](https://overthewire.org/wargames/ "OTW") levels quicker and more convenient.
 
 ## Features
 
+- Automates SSH login to remote OTW levels.
 - Stores the level passwords you've uncovered in a local file.
 - Connect to a level and start working by simply providing the level
   name (if the level's password has been stored; otherwise just enter it
-  during the connection process as per usual and it will be saved for you
-  to use in the future).
+  when prompted during the connection process).
 
 ## Requirements
 
-- Expect/Tcl
-- ssh
+- [expect](https://core.tcl-lang.org/expect/home "Expect")
+- [tcl](https://www.tcl.tk/software/tcltk/ "Tcl")
+- [ssh](https://www.openssh.com/ "SSH")
 
 ## Usage
 
 ```
-usage: ./otw.tcl LEVEL
-       ./otw.tcl [-h] [--password PASSWORD] [--level LEVEL]
+usage: ./otw.tcl [-h] [-p PASSWORD] [-l] LEVEL
 ```
 
 ## Examples

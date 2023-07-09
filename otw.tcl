@@ -7,12 +7,15 @@
 #####################################################################
 
 ###[ USER CONFIGS ]##################################################
+set SCRIPT_NAME       "$::argv0"
 set HOME_DIR          "$::env(HOME)"
 set DATA_DIR          ".otw"
 set DATA_FILENAME     "otw_data.txt"
-set DEFAULT_DIRPATH   [file join "$::HOME_DIR" "$::DATA_DIR"]
-set DEFAULT_FILEPATH  [file join "$::DEFAULT_DIRPATH" "$::DATA_FILENAME"]
-set SCRIPT_NAME       "$::argv0"
+set DEFAULT_DIR       [file join "$::HOME_DIR" "$::DATA_DIR"]
+set DEFAULT_FILEPATH  [file join "$::DEFAULT_DIR" "$::DATA_FILENAME"]
+set SCRIPT_DIR        [file dirname [file normalize "$::argv0"]]
+set SLIDER_FILE       [file join "$::SCRIPT_DIR" "slider.tcl"]
+set SPINNER_FILE      [file join "$::SCRIPT_DIR" "spinner.tcl"]
 
 ###[ EXPECT CONFIGS ]################################################
 log_user      0
@@ -242,8 +245,8 @@ proc create_password_file {levelarr} {
   }
 
   # Create data directory if it does not exist
-  if {[file exists "$::DEFAULT_DIRPATH"]                 == 0 &&
-      [catch {file mkdir "$::DEFAULT_DIRPATH"} err_msg] != 0} {
+  if {[file exists "$::DEFAULT_DIR"]                 == 0 &&
+      [catch {file mkdir "$::DEFAULT_DIR"} err_msg] != 0} {
     print_error "$err_msg"
     return 1
   }
@@ -289,7 +292,7 @@ proc update_password_file {levelarr newpass} {
   if {! [file exists "$::DEFAULT_FILEPATH"]}          {return 1}
   if {[catch {open "$::DEFAULT_FILEPATH" r} pass_fd]} {return 1}
 
-  set temp_filepath [file join "$::DEFAULT_DIRPATH" "tempfile.txt"]
+  set temp_filepath [file join "$::DEFAULT_DIR" "tempfile.txt"]
   if {[catch {open "$temp_filepath" w} temp_fd]}      {return 1}
 
   # Update the current level's password field
@@ -433,26 +436,31 @@ proc handle_pass_prompt {levelarr ssh_id newpass attemptcode spinner_id} {
 proc start_spinner {levelarr} {
   upvar $levelarr LEVEL
 
-  # I like the slider more so this makes it 3x more common ;-)
+  # I like the slider more so this makes it 3x more common :-)
   if {[expr {int(rand() * 4)}] >= 1} {
-    set spinner [file join [pwd] "slider.tcl"]
+    set spinner "$::SLIDER_FILE"
   } else {
-    set spinner [file join [pwd] "spinner.tcl"]
+    set spinner "$::SPINNER_FILE"
   }
 
   set interp [info nameofexecutable]
   set msg "Connecting to $LEVEL(host)"
 
-  set rv [catch {open |[list "$interp" "$spinner" "$msg"] "w"} spinner_id]
+  # Redirect subprocess' output to parent stderr (unbuffered by default)
+  set rv [catch {open |[list "$interp" "$spinner" "$msg" ">&@stderr"] "w"} chan]
   if {$rv > 0} {return ""}
-  return "$spinner_id"
+
+  chan configure $chan -blocking 0 -buffering none
+  return "$chan"
 }
 
 proc kill_spinner {spinner_id} {
   if {$spinner_id in [file channels]} {
-    puts $spinner_id "die"
-    flush $spinner_id
-    catch {close $spinner_id} ->
+    chan puts $spinner_id "die"
+
+    # Make channel blocking so that close waits for child to finish
+    chan configure $spinner_id -blocking 1
+    catch {chan close $spinner_id}
   }
 
   return
