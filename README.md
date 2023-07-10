@@ -3,7 +3,7 @@
 A shell script written in [Expect](https://www.tcl.tk/software/tcltk/ "Expect") that makes the process of connecting
 to [OverTheWire](https://overthewire.org/wargames/ "OTW") levels quicker and more convenient.
 
-[![asciicast](https://asciinema.org/a/595781.svg)](https://asciinema.org/a/595781)
+![demo](https://github.com/ryanv404/otw-level-connector/assets/95035038/aba26019-e005-4adf-b8eb-84dec40a24d0)
 
 ## Features
 
