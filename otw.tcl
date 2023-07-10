@@ -46,28 +46,46 @@ proc pstderr {msg} {
 }
 
 proc print_error {msg} {
-  pstderr [format "\[-\] %s" "$msg"]
+  if {$::HAS_TPUT} {
+    set FMT_RED "\033\[1;31m"
+    set FMT_CLR "\033\[0;0m"
+    pstderr [format "\[${FMT_RED}-${FMT_CLR}\] %s" "$msg"]
+  } else {
+    pstderr [format "\[-\] %s" "$msg"]
+  }
   return
 }
 
 proc print_success {msg} {
-  pstderr [format "\[+\] %s" "$msg"]
+  if {$::HAS_TPUT} {
+    set FMT_GRN "\033\[1;32m"
+    set FMT_CLR "\033\[0;0m"
+    pstderr [format "\[${FMT_GRN}+${FMT_CLR}\] %s" "$msg"]
+  } else {
+    pstderr [format "\[+\] %s" "$msg"]
+  }
   return
 }
 
 proc print_info {msg} {
-  pstderr [format "\[*\] %s" "$msg"]
+  if {$::HAS_TPUT} {
+    set FMT_CYAN "\033\[1;36m"
+    set FMT_CLR  "\033\[0;0m"
+    pstderr [format "\[${FMT_CYAN}*${FMT_CLR}\] %s" "$msg"]
+  } else {
+    pstderr [format "\[*\] %s" "$msg"]
+  }
   return
 }
 
 proc exit_msg {msg} {
-  pstderr [format "\[-\] %s" "$msg"]
+  print_error "$msg"
   exit -1
 }
 
 proc exit_usage {{msg {}}} {
   if {[string length $msg] != 0} {
-    pstderr [format "\[-\] %s\n" "$msg"]
+    print_error [format "%s\n" "$msg"]
   }
   pstderr "usage:"
   pstderr "  $::SCRIPT_NAME \[-h\] \[-p PASSWORD\] \[-l\] LEVEL"
@@ -85,11 +103,9 @@ proc handle_natas_levels {levelarr} {
 
   print_info "Use a web browser to connect to natas levels:"
   pstderr "    Username: $LEVEL(level)"
-
   if {[string equal "$LEVEL(password)" "?"] != 1} {
     pstderr "    Password: $LEVEL(password)"
   }
-
   pstderr "    Website:  http://$LEVEL(level).natas.labs.overthewire.org"
   return 0
 }
@@ -167,9 +183,6 @@ proc handle_cmdline_opts {optslist levelarr} {
 proc scr_init {} {
   if {$::HAS_TPUT} {
     exec "$::TPUT_CMD" civis >@stdout
-  } else {
-    chan puts -nonewline "\033\[?25l"
-    chan flush stdout
   }
   return
 }
@@ -179,46 +192,48 @@ proc scr_cleanup {len msg} {
   set maxlen [expr {$len + $strlen + 12}]
 
   chan puts -nonewline [format "\r%s\r" [string repeat " " $maxlen]]
-  chan flush stdout
 
   if {$::HAS_TPUT} {
     exec "$::TPUT_CMD" cnorm >@stdout
-  } else {
-    chan puts -nonewline "\033\[?25h"
-    chan flush stdout
   }
   return
 }
 
 proc run_slider {len msg} {
-  set FMT_GRN "\033\[1;32m"
-  set FMT_CLR "\033\[0;0m"
-
-  set delay 0.1
+  set delay   0.1
   set padchar "."
+
+  if {$::HAS_TPUT} {
+    set FMT_GRN "\033\[1;32m"
+    set FMT_CLR "\033\[0;0m"
+  } else {
+    set FMT_GRN ""
+    set FMT_CLR ""
+  }
+
   lappend slider_chars "${FMT_GRN}/${FMT_CLR}"
   lappend slider_chars "${FMT_GRN}\\${FMT_CLR}"
-
+  
   set chars_idx 0
-  set slider_char [lindex "$slider_chars" $chars_idx]
-  set tot_frames [expr {$len * 2}]
+  set slider_char    [lindex "$slider_chars" $chars_idx]
+  set tot_frames     [expr {$len * 2}]
   set slider_listlen [llength "$slider_chars"]
-
-  scr_init
 
   chan configure stdin  -blocking 0 -buffering none
   chan configure stdout -blocking 0 -buffering none
   chan configure stderr -blocking 0 -buffering none
 
+  scr_init
+
   for {set i 0} {1} {incr i} {
     set frame [expr {$i % $tot_frames}]
     if {$frame == 0 && $i != 0} {
       incr chars_idx
-      set chars_idx [expr {$chars_idx % $slider_listlen}]
+      set chars_idx   [expr {$chars_idx % $slider_listlen}]
       set slider_char [lindex "$slider_chars" $chars_idx]
     } elseif {$frame == $len} {
       incr chars_idx
-      set chars_idx [expr {$chars_idx % $slider_listlen}]
+      set chars_idx   [expr {$chars_idx % $slider_listlen}]
       set slider_char [lindex "$slider_chars" $chars_idx]
     }
 
@@ -232,10 +247,9 @@ proc run_slider {len msg} {
 
     set fmtstr [format "\[%s%s%s\] %s\r" "$lhs" "$slider_char" "$rhs" "$msg"]
     chan puts -nonewline "$fmtstr"
-    chan flush stdout
 
     sleep $delay
-    if {[chan gets stdin] eq "die"} {break}
+    if {[string equal "die" [chan gets stdin]]} {break}
   }
 
   scr_cleanup "$len" "$msg"
@@ -243,31 +257,36 @@ proc run_slider {len msg} {
 }
 
 proc run_spinner {len msg} {
-  set FMT_GRN "\033\[1;32m"
-  set FMT_CLR "\033\[0;0m"
-
   set delay 0.1
-  lappend spinner_chars "${FMT_GRN}/${FMT_CLR}"
-  lappend spinner_chars "${FMT_GRN}-${FMT_CLR}"
-  lappend spinner_chars "${FMT_GRN}\\${FMT_CLR}"
-  lappend spinner_chars "${FMT_GRN}|${FMT_CLR}"
-  set tot_frames [llength "$spinner_chars"]
+  
+  if {$::HAS_TPUT} {
+    set FMT_CYAN "\033\[1;36m"
+    set FMT_CLR  "\033\[0;0m"
+  } else {
+    set FMT_CYAN ""
+    set FMT_CLR  ""
+  }
+  
+  lappend spinner_chars "${FMT_CYAN}/${FMT_CLR}"
+  lappend spinner_chars "${FMT_CYAN}-${FMT_CLR}"
+  lappend spinner_chars "${FMT_CYAN}\\${FMT_CLR}"
+  lappend spinner_chars "${FMT_CYAN}|${FMT_CLR}"
 
-  scr_init
+  set tot_frames [llength "$spinner_chars"]
 
   chan configure stdin  -blocking 0 -buffering none
   chan configure stdout -blocking 0 -buffering none
   chan configure stderr -blocking 0 -buffering none
 
+  scr_init
+
   for {set i 0} {1} {incr i} {
     set frame_idx [expr {$i % $tot_frames}]
     set fmtstr [format "\[%s\] %s\r" [lindex "$spinner_chars" $frame_idx] "$msg"]
-
     chan puts -nonewline "$fmtstr"
-    chan flush stdout
 
     sleep $delay
-    if {[chan gets stdin] eq "die"} {break}
+    if {[string equal "die" [chan gets stdin]]} {break}
   }
 
   scr_cleanup "$len" "$msg"
@@ -288,25 +307,32 @@ proc start_spinner {levelarr} {
   }
 
   lappend script_args "$LEVEL(host)"
+
+  # Redirect subprocess' outputs to parent's stderr
   lappend script_args ">&@stderr"
 
-  # Redirect subprocess' output to parent stderr (unbuffered by default)
+  # Create a pipeline to asynchronously run a loading spinner
   set rv [catch {open |[list {*}$script_args] "w"} chan]
   if {$rv > 0} {return ""}
 
-  chan configure $chan -blocking 0 -buffering none
+  # Make pipeline unbuffered and non-blocking from parent's side
+  chan configure $chan  -blocking 0 -buffering none
+  chan configure stdout -blocking 0 -buffering none
+  chan configure stderr -blocking 0 -buffering none
   return "$chan"
 }
 
 proc kill_spinner {spinner_id} {
-  if {$spinner_id in [file channels]} {
-    chan puts $spinner_id "die"
-
-    # Make channel blocking so that close waits for child to finish
+  if {$spinner_id in [chan names]} {
     chan configure $spinner_id -blocking 1
+    chan puts $spinner_id "die"
+    chan flush $spinner_id
     catch {chan close $spinner_id}
-  }
 
+    # Restore settings
+    chan configure stdout -blocking 1 -buffering line
+    chan configure stderr -blocking 1 -buffering none
+  }
   return
 }
 
@@ -397,8 +423,7 @@ proc get_saved_password {levelarr} {
 proc create_password_file {levelarr} {
   upvar $levelarr LEVEL
 
-  # If home directory cannot be used, then use current directory
-  if {[file exists "$::HOME_DIR"]       == 0 ||
+  if {[file exists "$::HOME_DIR"]      == 0 ||
       [file isdirectory "$::HOME_DIR"] == 0 ||
       [file writable "$::HOME_DIR"]    == 0} {
     print_error "Unable to create a file in the home directory to store OTW passwords."
@@ -406,15 +431,15 @@ proc create_password_file {levelarr} {
   }
 
   # Create data directory if it does not exist
-  if {[file exists "$::DEFAULT_DIR"]                 == 0 &&
+  if {[file exists "$::DEFAULT_DIR"]                == 0 &&
       [catch {file mkdir "$::DEFAULT_DIR"} err_msg] != 0} {
     print_error "$err_msg"
     return 1
   }
 
-  # Bail out if a data file already exists and it contains data to avoid overwrites
+  # Bail out if a data file already exists and it contains data
   if {[file exists "$::DEFAULT_FILEPATH"] != 0 &&
-      [file size "$::DEFAULT_FILEPATH"]  != 0} {
+      [file size "$::DEFAULT_FILEPATH"]   != 0} {
     return 0
   }
 
@@ -496,9 +521,23 @@ proc handle_shell_prompt {levelarr ssh_id new_pass spinner_id} {
 
   if {[string equal "?" "$new_pass"] != 1} {
     if {[update_password_file LEVEL "$new_pass"] != 0} {
-      send_error -- "\[-\] Password could not be saved.\n"
+      if {$::HAS_TPUT} {
+        set FMT_RED "\033\[1;31m"
+        set FMT_CLR "\033\[0;0m"
+        set msg "Password could not be saved."
+        send_error -- [format "\[${FMT_RED}-${FMT_CLR}\] %s\n" "$msg"]
+      } else {
+        send_error -- "\[-\] Password could not be saved.\n"
+      }
     } else {
-      send_user -- "\[+\] Password saved.\n"
+      if {$::HAS_TPUT} {
+        set FMT_GRN "\033\[1;32m"
+        set FMT_CLR "\033\[0;0m"
+        set msg "Password saved."
+        send_user -- [format "\[${FMT_GRN}+${FMT_CLR}\] %s\n" "$msg"]
+      } else {
+        send_user -- "\[+\] Password saved.\n"
+      }
     }
   }
 
@@ -520,15 +559,29 @@ proc handle_pass_prompt {levelarr ssh_id newpass attemptcode spinner_id} {
       } else {
         kill_spinner $spinner_id
 
-        send_user -- "\[*\] Enter the $LEVEL(level) password: "
+        if {$::HAS_TPUT} {
+          set FMT_CYAN "\033\[1;36m"
+          set FMT_CLR  "\033\[0;0m"
+          set msg "Enter the $LEVEL(level) password: "
+          send_user -- [format "\[${FMT_CYAN}*${FMT_CLR}\] %s" "$msg"]
+        } else {
+          send_user -- "\[*\] Enter the $LEVEL(level) password: "
+        }
+
         expect_user -re {^(.*)\n$}
 
         if {[info exists expect_out(1,string)]} {
           set new_pass "$expect_out(1,string)"
         } else {
-          send_error -- "\n\[-\] Unable to process user input.\n"
+          if {$::HAS_TPUT} {
+            set FMT_RED "\033\[1;31m"
+            set FMT_CLR "\033\[0;0m"
+            set msg "Unable to process user input."
+            send_error -- [format "\n\[${FMT_RED}-${FMT_CLR}\] %s\n" "$msg"]
+          } else {
+            send_error -- "\n\[-\] Unable to process user input.\n"
+          }
         }
-
         exp_send -i "$ssh_id" -- "$new_pass\r"
         set attempt_code 3
       }
@@ -536,26 +589,57 @@ proc handle_pass_prompt {levelarr ssh_id newpass attemptcode spinner_id} {
     {2} {
       kill_spinner $spinner_id
 
-      send_user -- "\[*\] Enter the $LEVEL(level) password: "
+      if {$::HAS_TPUT} {
+        set FMT_CYAN "\033\[1;36m"
+        set FMT_CLR  "\033\[0;0m"
+        set msg "Enter the $LEVEL(level) password: "
+        send_user -- [format "\[${FMT_CYAN}*${FMT_CLR}\] %s" "$msg"]
+      } else {
+        send_user -- "\[*\] Enter the $LEVEL(level) password: "
+      }
+
       expect_user -re {^(.*)\n$}
 
       if {[info exists expect_out(1,string)]} {
         set new_pass "$expect_out(1,string)"
       } else {
-        send_error -- "\n\[-\] Unable to process user input.\n"
+        if {$::HAS_TPUT} {
+          set FMT_RED "\033\[1;31m"
+          set FMT_CLR "\033\[0;0m"
+          set msg "Unable to process user input."
+          send_error -- [format "\n\[${FMT_RED}-${FMT_CLR}\] %s\n" "$msg"]
+        } else {
+          send_error -- "\n\[-\] Unable to process user input.\n"
+        }
       }
 
       exp_send -i "$ssh_id" -- "$new_pass\r"
       set attempt_code 3
     }
     {3} {
-      send_user -- "\[-\] Incorrect password. Enter the $LEVEL(level) password: "
+      if {$::HAS_TPUT} {
+        set FMT_RED "\033\[1;31m"
+        set FMT_CLR "\033\[0;0m"
+        set msg "Incorrect password. Enter the $LEVEL(level) password: "
+        send_user -- [format "\[${FMT_RED}-${FMT_CLR}\] %s" "$msg"]
+      } else {
+        set msg "Incorrect password. Enter the $LEVEL(level) password: "
+        send_user -- [format "\[-\] %s" "$msg"]
+      }
+
       expect_user -re {^(.*)\n$}
 
       if {[info exists expect_out(1,string)]} {
         set new_pass "$expect_out(1,string)"
       } else {
-        send_error -- "\n\[-\] Unable to process user input.\n"
+        if {$::HAS_TPUT} {
+          set FMT_RED "\033\[1;31m"
+          set FMT_CLR "\033\[0;0m"
+          set msg "Unable to process user input."
+          send_error -- [format "\n\[${FMT_RED}-${FMT_CLR}\] %s\n" "$msg"]
+        } else {
+          send_error -- "\n\[-\] Unable to process user input.\n"
+        }
       }
 
       exp_send -i "$ssh_id" -- "$new_pass\r"
@@ -567,13 +651,29 @@ proc handle_pass_prompt {levelarr ssh_id newpass attemptcode spinner_id} {
       }
     }
     {4} {
-      send_user -- "\[-\] Incorrect password. Enter the $LEVEL(level) password: "
+      if {$::HAS_TPUT} {
+        set FMT_RED "\033\[1;31m"
+        set FMT_CLR "\033\[0;0m"
+        set msg "Incorrect password. Enter the $LEVEL(level) password: "
+        send_user -- [format "\[${FMT_RED}-${FMT_CLR}\] %s" "$msg"]
+      } else {
+        set msg "Incorrect password. Enter the $LEVEL(level) password: "
+        send_user -- [format "\[-\] %s" "$msg"]
+      }
+
       expect_user -re {^(.*)\n$}
 
       if {[info exists expect_out(1,string)]} {
         set new_pass "$expect_out(1,string)"
       } else {
-        send_error -- "\n\[-\] Unable to process user input.\n"
+        if {$::HAS_TPUT} {
+          set FMT_RED "\033\[1;31m"
+          set FMT_CLR "\033\[0;0m"
+          set msg "Unable to process user input."
+          send_error -- [format "\n\[${FMT_RED}-${FMT_CLR}\] %s\n" "$msg"]
+        } else {
+          send_error -- "\n\[-\] Unable to process user input.\n"
+        }
       }
 
       exp_send -i "$ssh_id" -- "$new_pass\r"
@@ -585,12 +685,11 @@ proc handle_pass_prompt {levelarr ssh_id newpass attemptcode spinner_id} {
     }
     default {
       kill_spinner $spinner_id
-      print_error "Error while processing user input"
+      print_error "Error while processing user's password."
       cleanup_spawned_process "$ssh_id"
       exit -1
     }
   }
-
   return
 }
 
@@ -599,7 +698,15 @@ proc handle_timeout {levelarr ssh_id spinner_id} {
 
   kill_spinner $spinner_id
 
-  send_error -- "\n\[-\] Connection to $LEVEL(host) timed out.\n"
+  if {$::HAS_TPUT} {
+    set FMT_RED "\033\[1;31m"
+    set FMT_CLR "\033\[0;0m"
+    set msg "Connection to $LEVEL(host) timed out."
+    send_error -- [format "\[${FMT_RED}-${FMT_CLR}\] %s\n" "$msg"]
+  } else {
+    send_error -- "\n\[-\] Connection to $LEVEL(host) timed out.\n"
+  }
+
   cleanup_spawned_process "$ssh_id"
   return
 }
@@ -610,7 +717,14 @@ proc too_many_attempts_check {ssh_id buf spinner_id} {
   kill_spinner $spinner_id
 
   if {[regexp "$too_many_attempts_RE" "$buf"] == 1} {
-    send_error -- "\[-\] Max number of login attempts exceeded.\n"
+    if {$::HAS_TPUT} {
+      set FMT_RED "\033\[1;31m"
+      set FMT_CLR "\033\[0;0m"
+      set msg "Max number of login attempts exceeded."
+      send_error -- [format "\[${FMT_RED}-${FMT_CLR}\] %s\n" "$msg"]
+    } else {
+      send_error -- "\[-\] Max number of login attempts exceeded.\n"
+    }
   }
 
   cleanup_spawned_process "$ssh_id"
@@ -629,7 +743,6 @@ proc cleanup_spawned_process {ssh_id} {
       [lindex "$wres" 2]  == -1} {
     print_error "An OS error (errno [lindex $wres 3]) occured in the ssh process."
   }
-
   return
 }
 
